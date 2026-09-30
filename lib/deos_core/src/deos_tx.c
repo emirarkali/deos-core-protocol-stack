@@ -1,4 +1,5 @@
 #include <deos/deos.h>
+#include <deos/deos_fault.h>
 #include "deos_internal.h"
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/can.h>
@@ -55,6 +56,7 @@ int deos_send(
     ret = can_send(config->can_dev, &frame, K_MSEC(100), NULL, NULL);
     if (ret != 0) {
         LOG_ERR("CAN send failed: %d", ret);
+        deos_fault_raise(DEOS_FAULT_TX_FAILURE, DEOS_FAULT_SEVERITY_WARNING);
         return ret;
     }
 

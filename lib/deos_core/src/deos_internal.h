@@ -67,6 +67,13 @@ int deos_router_init(void);
 void deos_route_message(const deos_message_t *msg, deos_transport_t incoming_transport);
 
 /*
+ * Fault Management (deos_fault.c)
+ */
+int deos_fault_init(void);
+void deos_fault_handle_get_faults(const deos_message_t *msg);
+void deos_fault_handle_clear_faults(const deos_message_t *msg);
+
+/*
  * Core Internal Access
  */
 const struct deos_config *deos_get_config(void);

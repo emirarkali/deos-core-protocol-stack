@@ -1,6 +1,4 @@
-zephyr_library_named(deos_core)
-
-zephyr_library_sources(
+add_library(deos_core STATIC
     src/deos_core.c
     src/deos_rx.c
     src/deos_tx.c
@@ -8,8 +6,9 @@ zephyr_library_sources(
     src/deos_codec.c
     src/deos_network.c
     src/deos_router.c
+    src/deos_fault.c
 )
 
-zephyr_include_directories(include)
-
+target_include_directories(deos_core PUBLIC include)
+target_link_libraries(deos_core PRIVATE zephyr_interface)
 target_link_libraries(app PRIVATE deos_core)

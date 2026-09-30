@@ -33,7 +33,13 @@ int deos_init(const struct deos_config *config)
 
     atomic_set(&tx_sequence, 0);
 
-    int ret = deos_dispatch_init();
+    int ret = deos_fault_init();
+    if (ret != 0) {
+        LOG_ERR("Failed to init fault manager");
+        return ret;
+    }
+
+    ret = deos_dispatch_init();
     if (ret != 0) {
         LOG_ERR("Failed to init dispatcher");
         return ret;

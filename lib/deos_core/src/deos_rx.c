@@ -1,11 +1,16 @@
 #include <deos/deos.h>
+#include <deos/deos_fault.h>
 #include "deos_internal.h"
 #include <zephyr/logging/log.h>
 #include <zephyr/drivers/can.h>
 #include <zephyr/kernel.h>
 #include <errno.h>
 
+#include <zephyr/sys/atomic.h>
+
 LOG_MODULE_REGISTER(deos_rx, LOG_LEVEL_INF);
+
+static atomic_t rx_overflow_flag = ATOMIC_INIT(0);
 
 /*
  * Static RX Queue
@@ -31,8 +36,7 @@ static void deos_can_rx_callback(const struct device *dev, struct can_frame *fra
 {
     /* Push to static queue, do not block */
     if (k_msgq_put(&rx_msgq, frame, K_NO_WAIT) != 0) {
-        /* Drop frame if queue is full */
-        /* Optionally increment a drop counter here */
+        atomic_set(&rx_overflow_flag, 1);
     }
 }
 
@@ -47,11 +51,16 @@ static void deos_rx_thread_func(void *p1, void *p2, void *p3)
     LOG_INF("DEOS RX Thread started");
 
     while (1) {
+        if (atomic_cas(&rx_overflow_flag, 1, 0)) {
+            deos_fault_raise(DEOS_FAULT_RX_QUEUE_OVERFLOW, DEOS_FAULT_SEVERITY_ERROR);
+        }
+
         if (k_msgq_get(&rx_msgq, &frame, K_FOREVER) == 0) {
             int ret = deos_decode_frame(&frame, &msg);
             
             if (ret != 0) {
                 LOG_WRN("Failed to decode frame: %d", ret);
+                deos_fault_raise(DEOS_FAULT_PROTOCOL_ERROR, DEOS_FAULT_SEVERITY_WARNING);
                 continue;
             }
 

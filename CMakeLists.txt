@@ -5,17 +5,16 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(deos_core_proto)
 
 
-# ---------------------------------------------------------
-# DEOS Core Library
-# ---------------------------------------------------------
-
-add_subdirectory(lib/deos_core)
-
-
-# ---------------------------------------------------------
-# Application
-# ---------------------------------------------------------
-
 target_sources(app PRIVATE
     src/main.c
+    lib/deos_core/src/deos_core.c
+    lib/deos_core/src/deos_rx.c
+    lib/deos_core/src/deos_tx.c
+    lib/deos_core/src/deos_dispatch.c
+    lib/deos_core/src/deos_codec.c
+    lib/deos_core/src/deos_network.c
+    lib/deos_core/src/deos_router.c
+    lib/deos_core/src/deos_fault.c
 )
+
+zephyr_include_directories(lib/deos_core/include)

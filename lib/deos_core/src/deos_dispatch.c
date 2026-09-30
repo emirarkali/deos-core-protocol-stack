@@ -110,6 +110,17 @@ void deos_dispatch(const deos_message_t *msg)
         }
     }
 
+    /* Common Diagnostic Behaviour */
+    if (msg->service == DEOS_SERVICE_DIAGNOSTIC) {
+        if (msg->message_class == DEOS_CLASS_REQUEST && msg->command == DEOS_CMD_DIAG_GET_FAULTS) {
+            deos_fault_handle_get_faults(msg);
+            return;
+        } else if (msg->message_class == DEOS_CLASS_COMMAND && msg->command == DEOS_CMD_DIAG_CLEAR_FAULTS) {
+            deos_fault_handle_clear_faults(msg);
+            return;
+        }
+    }
+
     /* Application Handlers */
     bool handled = false;
     for (int i = 0; i < DEOS_MAX_HANDLERS; i++) {

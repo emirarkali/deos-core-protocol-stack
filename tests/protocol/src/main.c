@@ -96,6 +96,78 @@ ZTEST(deos_protocol, test_09_local_node_broadcast_init_reject)
     zassert_equal(ret, -EINVAL, "Init with broadcast node should fail");
 }
 
+ZTEST_SUITE(deos_fault_test, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(deos_fault_test, test_fault_01_reject_zero_id)
+{
+    deos_fault_init();
+    int ret = deos_fault_raise(0, DEOS_FAULT_SEVERITY_ERROR);
+    zassert_equal(ret, -EINVAL, "Fault ID 0 should be rejected");
+}
+
+ZTEST(deos_fault_test, test_fault_02_new_fault_raise)
+{
+    deos_fault_init();
+    int ret = deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    zassert_equal(ret, 0, "Raise failed");
+    zassert_true(deos_fault_is_active(0x0100), "Fault should be active");
+}
+
+ZTEST(deos_fault_test, test_fault_03_same_fault_repeated)
+{
+    deos_fault_init();
+    deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    
+    /* Internal API would be needed to test occurrence count directly, 
+       but we can at least ensure it doesn't fail. */
+    zassert_true(deos_fault_is_active(0x0100), "Fault should still be active");
+}
+
+ZTEST(deos_fault_test, test_fault_04_set_inactive)
+{
+    deos_fault_init();
+    deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    deos_fault_set_inactive(0x0100);
+    zassert_false(deos_fault_is_active(0x0100), "Fault should be inactive");
+}
+
+ZTEST(deos_fault_test, test_fault_05_latch)
+{
+    deos_fault_init();
+    deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    deos_fault_latch(0x0100);
+    zassert_true(deos_fault_is_active(0x0100), "Latched fault should be active");
+}
+
+ZTEST(deos_fault_test, test_fault_06_clear_single)
+{
+    deos_fault_init();
+    deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    deos_fault_clear(0x0100);
+    zassert_false(deos_fault_is_active(0x0100), "Fault should be cleared");
+}
+
+ZTEST(deos_fault_test, test_fault_07_clear_all)
+{
+    deos_fault_init();
+    deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
+    deos_fault_raise(0x0101, DEOS_FAULT_SEVERITY_ERROR);
+    deos_fault_clear_all();
+    zassert_false(deos_fault_is_active(0x0100), "Fault 0x0100 should be cleared");
+    zassert_false(deos_fault_is_active(0x0101), "Fault 0x0101 should be cleared");
+}
+
+ZTEST(deos_fault_test, test_fault_08_max_table_full)
+{
+    deos_fault_init();
+    for (int i = 1; i <= 32; i++) {
+        deos_fault_raise(i, DEOS_FAULT_SEVERITY_INFO);
+    }
+    int ret = deos_fault_raise(33, DEOS_FAULT_SEVERITY_INFO);
+    zassert_equal(ret, -ENOSPC, "Should return -ENOSPC when table is full");
+}
+
 /* 
  * NOTE: Other tests for frame length validation, ping encoding, sequence logic 
  * can be added here following the same structure. 
