@@ -45,6 +45,7 @@ struct deos_config {
     deos_node_id_t node_id;
     const struct device *can_dev;
     bool router_enabled;
+    bool hosted_nodes_enabled;
 };
 
 /*

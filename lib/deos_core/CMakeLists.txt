@@ -8,7 +8,5 @@ add_library(deos_core STATIC
     src/deos_router.c
     src/deos_fault.c
 )
-
 target_include_directories(deos_core PUBLIC include)
 target_link_libraries(deos_core PRIVATE zephyr_interface)
-target_link_libraries(app PRIVATE deos_core)

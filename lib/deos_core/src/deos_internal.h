@@ -21,9 +21,11 @@ int16_t  deos_get_i16_le(const uint8_t *src);
 uint32_t deos_get_u32_le(const uint8_t *src);
 
 /*
- * Sequence Management
+ * Sequence and Node Management
  */
-uint8_t deos_next_sequence(void);
+uint8_t deos_next_sequence_for_node(deos_node_id_t node_id);
+bool deos_is_local_node(deos_node_id_t node_id);
+int deos_get_local_nodes(deos_node_id_t *nodes, int max_nodes);
 
 /*
  * CAN ID and Frame Codec (deos_codec.c)

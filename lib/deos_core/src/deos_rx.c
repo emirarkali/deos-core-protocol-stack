@@ -27,7 +27,8 @@ K_MSGQ_DEFINE(rx_msgq, sizeof(struct can_frame), DEOS_RX_QUEUE_SIZE, 4);
 
 static struct k_thread rx_thread_data;
 static K_KERNEL_STACK_DEFINE(rx_thread_stack, DEOS_RX_THREAD_STACK_SIZE);
-static int rx_filter_ids[2] = {-1, -1};
+#define DEOS_MAX_RX_FILTERS 6
+static int rx_filter_ids[DEOS_MAX_RX_FILTERS] = {-1, -1, -1, -1, -1, -1};
 
 /*
  * CAN RX Callback (Runs in interrupt context)
@@ -105,6 +106,14 @@ int deos_rx_init(void)
         return ret;
     }
 
+    LOG_DBG("RX infrastructure initialized");
+    return 0;
+}
+
+int deos_rx_start(void)
+{
+    const struct deos_config *config = deos_get_config();
+
     if (config->router_enabled) {
         /* Add CAN filter for router (promiscuous for extended DEOS frames) */
         struct can_filter filter = {
@@ -119,42 +128,47 @@ int deos_rx_init(void)
             return rx_filter_ids[0];
         }
     } else {
-        /* Filter 1: Local destination */
-        struct can_filter local_filter = {
-            .flags = CAN_FILTER_IDE,
-            .id = ((uint32_t)config->node_id << DEOS_CAN_DESTINATION_SHIFT),
-            .mask = ((uint32_t)DEOS_CAN_DESTINATION_MASK << DEOS_CAN_DESTINATION_SHIFT)
-        };
+        /* Filter for all registered local nodes */
+        deos_node_id_t local_nodes[4]; /* Max 4 nodes currently */
+        int num_nodes = deos_get_local_nodes(local_nodes, 4);
         
-        rx_filter_ids[0] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &local_filter);
-        if (rx_filter_ids[0] < 0) {
-            LOG_ERR("Failed to add local RX filter: %d", rx_filter_ids[0]);
-            return rx_filter_ids[0];
+        int filter_idx = 0;
+        for (int i = 0; i < num_nodes; i++) {
+            struct can_filter local_filter = {
+                .flags = CAN_FILTER_IDE,
+                .id = ((uint32_t)local_nodes[i] << DEOS_CAN_DESTINATION_SHIFT),
+                .mask = ((uint32_t)DEOS_CAN_DESTINATION_MASK << DEOS_CAN_DESTINATION_SHIFT)
+            };
+            
+            rx_filter_ids[filter_idx] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &local_filter);
+            if (rx_filter_ids[filter_idx] < 0) {
+                LOG_ERR("Failed to add local RX filter for node 0x%02X: %d", local_nodes[i], rx_filter_ids[filter_idx]);
+                for (int j = 0; j < filter_idx; j++) {
+                    can_remove_rx_filter(config->can_dev, rx_filter_ids[j]);
+                    rx_filter_ids[j] = -1;
+                }
+                return rx_filter_ids[filter_idx];
+            }
+            filter_idx++;
         }
 
-        /* Filter 2: Broadcast destination */
+        /* Filter for Broadcast destination */
         struct can_filter broadcast_filter = {
             .flags = CAN_FILTER_IDE,
             .id = ((uint32_t)DEOS_NODE_BROADCAST << DEOS_CAN_DESTINATION_SHIFT),
             .mask = ((uint32_t)DEOS_CAN_DESTINATION_MASK << DEOS_CAN_DESTINATION_SHIFT)
         };
         
-        rx_filter_ids[1] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &broadcast_filter);
-        if (rx_filter_ids[1] < 0) {
-            LOG_ERR("Failed to add broadcast RX filter: %d", rx_filter_ids[1]);
-            can_remove_rx_filter(config->can_dev, rx_filter_ids[0]); /* Cleanup */
-            rx_filter_ids[0] = -1;
-            return rx_filter_ids[1];
+        rx_filter_ids[filter_idx] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &broadcast_filter);
+        if (rx_filter_ids[filter_idx] < 0) {
+            LOG_ERR("Failed to add broadcast RX filter: %d", rx_filter_ids[filter_idx]);
+            for (int j = 0; j < filter_idx; j++) {
+                can_remove_rx_filter(config->can_dev, rx_filter_ids[j]);
+                rx_filter_ids[j] = -1;
+            }
+            return rx_filter_ids[filter_idx];
         }
     }
-
-    LOG_DBG("RX infrastructure initialized");
-    return 0;
-}
-
-int deos_rx_start(void)
-{
-    const struct deos_config *config = deos_get_config();
     
     /* Start CAN device */
     int ret = can_start(config->can_dev);

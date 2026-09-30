@@ -10,6 +10,7 @@ LOG_MODULE_REGISTER(deos_dispatch, LOG_LEVEL_INF);
 
 struct deos_handler_entry {
     bool in_use;
+    deos_node_id_t local_node;
     deos_message_class_t message_class;
     deos_service_id_t service;
     uint8_t command;
@@ -26,7 +27,8 @@ int deos_dispatch_init(void)
     return 0;
 }
 
-int deos_register_handler(
+int deos_register_handler_for_node(
+    deos_node_id_t local_node,
     deos_message_class_t message_class,
     deos_service_id_t service,
     uint8_t command,
@@ -37,6 +39,10 @@ int deos_register_handler(
         return -EINVAL;
     }
 
+    if (!deos_is_local_node(local_node)) {
+        return -EPERM;
+    }
+
     int free_slot = -1;
 
     for (int i = 0; i < DEOS_MAX_HANDLERS; i++) {
@@ -45,7 +51,8 @@ int deos_register_handler(
                 free_slot = i;
             }
         } else {
-            if (handler_registry[i].message_class == message_class &&
+            if (handler_registry[i].local_node == local_node &&
+                handler_registry[i].message_class == message_class &&
                 handler_registry[i].service == service &&
                 handler_registry[i].command == command) {
                 return -EEXIST; /* Duplicate */
@@ -57,6 +64,7 @@ int deos_register_handler(
         return -ENOSPC; /* Full */
     }
 
+    handler_registry[free_slot].local_node    = local_node;
     handler_registry[free_slot].message_class = message_class;
     handler_registry[free_slot].service       = service;
     handler_registry[free_slot].command       = command;
@@ -64,32 +72,37 @@ int deos_register_handler(
     handler_registry[free_slot].user_data     = user_data;
     handler_registry[free_slot].in_use        = true;
 
-    LOG_DBG("Registered handler for Class: 0x%X, Svc: 0x%X, Cmd: 0x%X",
-            message_class, service, command);
+    LOG_DBG("Registered handler for Node: 0x%02X Class: 0x%X, Svc: 0x%X, Cmd: 0x%X",
+            local_node, message_class, service, command);
 
     return 0;
+}
+
+int deos_register_handler(
+    deos_message_class_t message_class,
+    deos_service_id_t service,
+    uint8_t command,
+    deos_message_handler_t handler,
+    void *user_data)
+{
+    const struct deos_config *config = deos_get_config();
+    if (!config) return -ENODEV;
+
+    return deos_register_handler_for_node(
+        config->node_id, message_class, service, command, handler, user_data);
 }
 
 void deos_dispatch(const deos_message_t *msg)
 {
     const struct deos_config *config = deos_get_config();
-    bool is_local = (msg->destination == config->node_id || msg->destination == DEOS_NODE_BROADCAST);
+    bool is_local = deos_is_local_node(msg->destination) || (msg->destination == DEOS_NODE_BROADCAST);
 
     /* Router Logic */
-    if (config->router_enabled && config->node_id == DEOS_NODE_MAIN_STM32) {
-        if (msg->destination != config->node_id) {
-            /* Message for another node, route it */
-            deos_route_message(msg, DEOS_TRANSPORT_CAN_FD);
-            
-            /* If it is not a broadcast, we stop processing locally */
-            if (msg->destination != DEOS_NODE_BROADCAST) {
-                return;
-            }
-        }
+    if (config->router_enabled && !deos_is_local_node(msg->destination)) {
+        deos_route_message(msg, DEOS_TRANSPORT_CAN_FD);
     }
 
     if (!is_local) {
-        /* Not for us */
         return;
     }
 
@@ -125,6 +138,7 @@ void deos_dispatch(const deos_message_t *msg)
     bool handled = false;
     for (int i = 0; i < DEOS_MAX_HANDLERS; i++) {
         if (handler_registry[i].in_use &&
+            (handler_registry[i].local_node == msg->destination || msg->destination == DEOS_NODE_BROADCAST) &&
             handler_registry[i].message_class == msg->message_class &&
             handler_registry[i].service == msg->service &&
             handler_registry[i].command == msg->command) {

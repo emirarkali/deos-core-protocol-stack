@@ -168,7 +168,28 @@ ZTEST(deos_fault_test, test_fault_08_max_table_full)
     zassert_equal(ret, -ENOSPC, "Should return -ENOSPC when table is full");
 }
 
+ZTEST_SUITE(deos_local_node_test, NULL, NULL, NULL, NULL, NULL);
+
+ZTEST(deos_local_node_test, test_local_node_01_primary_node_is_local)
+{
+    /* Assuming node is initialized to DEOS_NODE_STEERING */
+    zassert_true(deos_is_local_node(DEOS_NODE_STEERING), "Primary node should be local");
+}
+
+ZTEST(deos_local_node_test, test_local_node_02_unregistered_node_is_not_local)
+{
+    zassert_false(deos_is_local_node(DEOS_NODE_BRAKE), "Unregistered node should not be local");
+}
+
+ZTEST(deos_local_node_test, test_local_node_03_invalid_node_is_not_local)
+{
+    zassert_false(deos_is_local_node(DEOS_NODE_INVALID), "Invalid node should not be local");
+}
+
 /* 
- * NOTE: Other tests for frame length validation, ping encoding, sequence logic 
- * can be added here following the same structure. 
+ * NOTE: Further tests requiring deos_init (which requires a valid CAN dev)
+ * like register_local_node and routing can be implemented when a full CAN mock
+ * or loopback device is fully linked into the ZTEST runner.
+ *
+ * Current tests cover the basic codec, fault storage, and basic node identity checks.
  */

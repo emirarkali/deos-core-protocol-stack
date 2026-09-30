@@ -38,8 +38,9 @@ void deos_handle_ping(const deos_message_t *msg)
     LOG_DBG("Received PING from 0x%02X with ID 0x%08X", msg->source, ping_id);
 
     /* Automatically generate PONG */
-    /* PONG sequence will use normal node sequence via deos_send */
-    int ret = deos_send(
+    /* PONG sequence will use normal node sequence via deos_send_from_node */
+    int ret = deos_send_from_node(
+        msg->destination, /* Reply from the targeted local node */
         msg->source,
         DEOS_PRIO_NETWORK,
         DEOS_CLASS_NETWORK,

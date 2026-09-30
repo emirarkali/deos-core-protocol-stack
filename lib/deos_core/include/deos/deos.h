@@ -72,6 +72,36 @@ int deos_register_handler(
     deos_message_handler_t handler,
     void *user_data);
 
+/**
+ * @brief Register an additional local logical node.
+ * Must be called before deos_start().
+ */
+int deos_register_local_node(deos_node_id_t node_id);
+
+/**
+ * @brief Register a handler for a specific local node.
+ */
+int deos_register_handler_for_node(
+    deos_node_id_t local_node,
+    deos_message_class_t message_class,
+    deos_service_id_t service,
+    uint8_t command,
+    deos_message_handler_t handler,
+    void *user_data);
+
+/**
+ * @brief Send a DEOS message from a specific local node.
+ */
+int deos_send_from_node(
+    deos_node_id_t source_node,
+    deos_node_id_t destination,
+    deos_priority_t priority,
+    deos_message_class_t message_class,
+    deos_service_id_t service,
+    uint8_t command,
+    const void *payload,
+    size_t payload_len);
+
 #ifdef __cplusplus
 }
 #endif

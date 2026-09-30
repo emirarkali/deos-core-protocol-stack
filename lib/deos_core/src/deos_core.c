@@ -6,8 +6,17 @@
 LOG_MODULE_REGISTER(deos_core, LOG_LEVEL_INF);
 
 static struct deos_config core_config;
-static atomic_t tx_sequence = ATOMIC_INIT(0);
 static bool is_initialized = false;
+
+#define DEOS_MAX_LOCAL_NODES 4
+
+struct deos_local_node_context {
+    deos_node_id_t node_id;
+    atomic_t tx_sequence;
+    bool in_use;
+};
+
+static struct deos_local_node_context local_nodes[DEOS_MAX_LOCAL_NODES];
 static bool is_started = false;
 
 extern int deos_rx_init(void);
@@ -31,7 +40,12 @@ int deos_init(const struct deos_config *config)
     /* Save configuration */
     core_config = *config;
 
-    atomic_set(&tx_sequence, 0);
+    for (int i = 0; i < DEOS_MAX_LOCAL_NODES; i++) {
+        local_nodes[i].in_use = false;
+    }
+    local_nodes[0].node_id = core_config.node_id;
+    local_nodes[0].in_use = true;
+    atomic_set(&local_nodes[0].tx_sequence, 0);
 
     int ret = deos_fault_init();
     if (ret != 0) {
@@ -91,9 +105,64 @@ const struct deos_config *deos_get_config(void)
     return &core_config;
 }
 
-uint8_t deos_next_sequence(void)
+int deos_register_local_node(deos_node_id_t node_id)
 {
-    /* Atomically increment and return the previous value. Wrap at 255. */
-    atomic_val_t seq = atomic_inc(&tx_sequence);
-    return (uint8_t)(seq & 0xFF);
+    if (!is_initialized) return -EPERM;
+    if (is_started) return -EBUSY;
+    if (!core_config.hosted_nodes_enabled) return -ENOTSUP;
+    if (node_id == DEOS_NODE_INVALID || node_id == DEOS_NODE_BROADCAST) return -EINVAL;
+
+    /* Check duplicate */
+    for (int i = 0; i < DEOS_MAX_LOCAL_NODES; i++) {
+        if (local_nodes[i].in_use && local_nodes[i].node_id == node_id) {
+            return -EALREADY;
+        }
+    }
+
+    /* Find empty slot */
+    for (int i = 0; i < DEOS_MAX_LOCAL_NODES; i++) {
+        if (!local_nodes[i].in_use) {
+            local_nodes[i].node_id = node_id;
+            local_nodes[i].in_use = true;
+            atomic_set(&local_nodes[i].tx_sequence, 0);
+            return 0;
+        }
+    }
+
+    return -ENOSPC;
+}
+
+bool deos_is_local_node(deos_node_id_t node_id)
+{
+    if (node_id == DEOS_NODE_INVALID || node_id == DEOS_NODE_BROADCAST) {
+        return false;
+    }
+    for (int i = 0; i < DEOS_MAX_LOCAL_NODES; i++) {
+        if (local_nodes[i].in_use && local_nodes[i].node_id == node_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int deos_get_local_nodes(deos_node_id_t *nodes, int max_nodes)
+{
+    int count = 0;
+    for (int i = 0; i < DEOS_MAX_LOCAL_NODES && count < max_nodes; i++) {
+        if (local_nodes[i].in_use) {
+            nodes[count++] = local_nodes[i].node_id;
+        }
+    }
+    return count;
+}
+
+uint8_t deos_next_sequence_for_node(deos_node_id_t node_id)
+{
+    for (int i = 0; i < DEOS_MAX_LOCAL_NODES; i++) {
+        if (local_nodes[i].in_use && local_nodes[i].node_id == node_id) {
+            atomic_val_t seq = atomic_inc(&local_nodes[i].tx_sequence);
+            return (uint8_t)(seq & 0xFF);
+        }
+    }
+    return 0;
 }

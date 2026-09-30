@@ -1,97 +1,139 @@
 # DEOS Core Protocol Stack
 
-## DEOS Core Nedir
-DEOS Core, STM32 tabanlı Zephyr node'ları arasında CAN-FD üzerinden ortak olarak kullanılacak iletişim kütüphanesidir.
-Traction, Steering, Brake gibi fiziksel kontrol düğümleri, CAN frame'leriyle uğraşmak yerine `deos_send` ve `deos_register_handler` aracılığıyla DEOS Core'u kullanır.
+![Zephyr RTOS](https://img.shields.io/badge/Zephyr-RTOS-blue)
+![C17](https://img.shields.io/badge/C-17-orange)
+![CAN-FD](https://img.shields.io/badge/Bus-CAN--FD-green)
 
-## CAN-FD Gereksinimi
-Bu protokol **TAMAMEN** CAN-FD altyapısı üzerine tasarlanmıştır. Classic CAN desteği veya fallback mekanizması bulunmamaktadır. 
-Eğer çalışılan geliştirme kartı (örn. nucleo_f439zi) CAN-FD desteklemiyorsa, `deos_init` ve `deos_start` API'leri `ENOTSUP` (veya ilgili driver hatasını) döndürür. Bu durum bir hardware/development-board limitasyonudur, protokolün kısıtlaması değildir.
+DEOS Core, STM32 tabanlı (veya uyumlu diğer donanımlar üzerindeki) Zephyr RTOS node'ları arasında geliştirilmiş, tamamen **CAN-FD** tabanlı, yüksek performanslı ve deterministik bir iletişim kütüphanesidir.
 
-## 29-bit CAN ID Formatı
-CAN-FD mesajları 29-bit Extended Identifier kullanır. Yapısı şöyledir:
-- **Bits 28..26:** Priority (3 bit)
-- **Bits 25..22:** Message Class (4 bit)
-- **Bits 21..16:** Service ID (6 bit)
-- **Bits 15..8:** Destination Node (8 bit)
-- **Bits 7..0:** Source Node (8 bit)
+Traction, Steering, Brake gibi fiziksel kontrol düğümleri (node'lar), doğrudan CAN frame'leri ile uğraşmak yerine DEOS Core'un sunduğu `deos_send` ve `deos_register_handler` gibi yüksek seviyeli, güvenli ve test edilmiş API'leri kullanırlar.
 
-## Directory Structure
-```
-lib/deos_core/
-├── CMakeLists.txt
-├── include/
-│   └── deos/
-│       ├── deos.h          (Public API)
-│       ├── deos_icd.h      (Protocol Definitions)
-│       └── deos_types.h    (Structs & Types)
-└── src/
-    ├── deos_internal.h
-    ├── deos_core.c
-    ├── deos_codec.c
-    ├── deos_rx.c
-    ├── deos_tx.c
-    ├── deos_dispatch.c
-    ├── deos_network.c
-    └── deos_router.c
-```
+## 🌟 Temel Özellikler (Key Features)
 
-## Initialization ve Kullanım
+- **Tamamen CAN-FD Tabanlı:** 64 byte'a kadar payload ve yüksek hız. (Classic CAN desteği veya fallback mekanizması yoktur, donanım desteklemiyorsa `ENOTSUP` döner).
+- **Sıfır Dinamik Bellek (Zero-Allocation):** `malloc` veya `free` kullanılmaz. Tamamen RAM dostu, statik ve deterministik bellek yönetimi (MISRA C / safety-critical yaklaşımlarına uygun).
+- **Gelişmiş Fault Management:** Sistemdeki hataların tespiti, saklanması (latching), temizlenmesi ve diagnostik akışlar (`GET_FAULTS`, `CLEAR_FAULTS`) tamamen Core tarafından yönetilir.
+- **Donanımsal RX Filtreleme (Hardware RX Filters):** Yalnızca hedeflenen mesajların (Local & Broadcast) MCU'yu uyandırmasını sağlayan donanım destekli CAN filtreleri (Router node'lar için promiscuous mod desteği).
+- **Otonom PING/PONG:** Ağdaki canlılığı kontrol etmek için uygulamanın (application) haberi olmadan arka planda otomatik PONG yanıtı üretir.
+- **Ayrıştırılmış Mimari:** Application katmanı (iş mantığı) ile Core katmanı (haberleşme, serialization, fault handling) birbirinden kesin çizgilerle ayrılmıştır.
+
+## 🏗 Mimari Felsefe (Separation of Concerns)
+
+- **Application:** "Motoru 45 derece döndürmek istiyorum" veya "Şu sensör değerini göndermeliyim."
+- **DEOS Core:** "Bu veriyi CAN-FD üzerinden sequence, version ve endianness kurallarına göre nasıl paketlerim/açarım?"
+- **Control Thread:** "PID algoritmasını uygulayarak fiziksel donanımı nasıl süreceğim?"
+
+## 📡 29-bit CAN ID Formatı (Extended ID)
+
+Tüm DEOS mesajları 29-bit Extended Identifier kullanır:
+
+| Bit Range | Uzunluk | Açıklama |
+| :--- | :--- | :--- |
+| **28..26** | 3 bit | **Priority:** Mesaj önceliği (örn. URGENT, STATUS, LOG) |
+| **25..22** | 4 bit | **Message Class:** Mesaj sınıfı (Command, Status, Diagnostic vs.) |
+| **21..16** | 6 bit | **Service ID:** İlgili servis (Steering, Brake, Power vb.) |
+| **15..8** | 8 bit | **Destination Node:** Hedef node ID (0xFF Broadcast) |
+| **7..0** | 8 bit | **Source Node:** Kaynak node ID |
+
+## 🚀 Hızlı Başlangıç (Quick Start)
+
+### 1. Sistemin Başlatılması (Initialization)
 
 ```c
 #include <deos/deos.h>
 
 void main(void) {
+    /* 1. Core konfigürasyonu (Örn: Steering Node, Normal mod) */
     struct deos_config config = {
         .node_id = DEOS_NODE_STEERING,
         .can_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus)),
         .router_enabled = false
     };
 
-    /* 1. Initialize core */
-    deos_init(&config);
+    /* 2. Sistemi ilklendir */
+    if (deos_init(&config) != 0) {
+        LOG_ERR("DEOS Init failed!");
+        return;
+    }
 
-    /* 2. Register Application Handlers */
+    /* 3. Gelen komutlar için Handler kayıt et (Application katmanına bağla) */
     deos_register_handler(
-        DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING,
+        DEOS_CLASS_COMMAND, 
+        DEOS_SERVICE_STEERING,
         DEOS_CMD_STEERING_SET_TARGET_ANGLE,
-        steering_handler, NULL);
+        steering_handler, 
+        NULL
+    );
 
-    /* 3. Start RX threads */
+    /* 4. Arka plan TX/RX thread'lerini başlat */
     deos_start();
 
-    /* 4. Send Message (Source is spoof-protected automatically) */
+    /* 5. Dışarıya mesaj gönder (Source ID otomatik olarak korunur) */
     uint16_t current_angle = 450; 
     deos_send(
-        DEOS_NODE_MAIN_STM32, DEOS_PRIO_STATUS,
-        DEOS_CLASS_STATUS, DEOS_SERVICE_STEERING,
+        DEOS_NODE_MAIN_STM32, 
+        DEOS_PRIO_STATUS,
+        DEOS_CLASS_STATUS, 
+        DEOS_SERVICE_STEERING,
         DEOS_CMD_STEERING_GET_STATUS,
-        &current_angle, sizeof(current_angle));
+        &current_angle, 
+        sizeof(current_angle)
+    );
 }
 ```
 
-## PING / PONG
-Ağdaki cihazların canlılığını kontrol etmek için kullanılır.
-```c
-deos_send_ping(DEOS_NODE_MAIN_STM32, 0x12345678);
+## 🛡 Fault Management (Hata Yönetimi)
+Fault Management modülü, node'larda gerçekleşen hataların tek bir elden yönetilmesini sağlar.
+- **Raising:** `deos_fault_raise(DEOS_FAULT_RX_QUEUE_OVERFLOW, DEOS_FAULT_SEVERITY_ERROR)`
+- **Latching:** `deos_fault_latch()` ile sabitlenen hatalar sadece `CLEAR_FAULTS` komutu ile temizlenebilir.
+- **Diagnostik Streaming:** Diğer bir node'dan (Örn: Main MCU) `GET_FAULTS` komutu geldiğinde, DEOS Core bloklanmayan (non-blocking) `k_work_delayable` altyapısı ile mevcut hataları aralarında nominal 100 ms boşluk bırakarak karşıya aktarır. Tamamen otonom çalışır.
+
+## 🎛 Donanımsal RX Filtreleme (Hardware RX Filter)
+Sistem iki farklı rolü destekler:
+- **Normal Node (`router_enabled = false`):** Donanım (Hardware) seviyesinde yalnızca *kendi Node ID'sine* veya *Broadcast (0xFF)* adresine gelen frame'leri kabul edecek şekilde iki adet filtre (maskeleme) oluşturur. Geri kalan trafik CPU'yu yormadan (interrupt tetiklemeden) donanımsal olarak reddedilir.
+- **Router Node (`router_enabled = true`):** Main MCU gibi ağları birbirine bağlayan cihazlar, promiscuous (geniş) maskeleme kullanarak tüm uzatılmış (Extended) DEOS paketlerini kabul eder ve iç yazılımsal dispatcher/router (yönlendirici) kurallarına göre analiz eder.
+
+## 🧪 Testler (Unit Testing)
+Proje, Zephyr ZTEST framework'ü kullanılarak yazılmış kapsamlı bir test takımına sahiptir. Testleri koşturmak için:
+```bash
+west build -b native_sim tests/protocol/ -t run
+# veya gerçek donanımda
+west build -b nucleo_f439zi tests/protocol/ -p always
 ```
-Geçerli bir PING alan `deos_core`, application'a sormadan **otomatik olarak** PONG yanıtı üretir. (Broadcast PING'ler network storm'u engellemek için reject edilir).
+*(Not: `native_sim` (eski adıyla `native_posix`) ortamı mock CAN sürücüsü ile ZTEST için kullanılabilir).*
 
-## Routing Concept
-Protokol, BMS Gateway veya Main STM32 gibi düğümler üzerinden farklı alt ağlara (CAN-FD, Ethernet vb.) mesaj yönlendirmeyi destekler. Main STM32 yapılandırıldığında `router_enabled` bayrağı üzerinden, kendisine ait olmayan veya broadcast olan paketleri `deos_router.c` vasıtasıyla hedef ağlara iletebilir.
+## 📂 Dizin Yapısı (Directory Structure)
+```
+.
+├── CMakeLists.txt
+├── lib/
+│   └── deos_core/
+│       ├── CMakeLists.txt
+│       ├── include/deos/
+│       │   ├── deos.h          (Public API)
+│       │   ├── deos_fault.h    (Fault Definitions)
+│       │   ├── deos_icd.h      (Protocol ID/Bit Definitions)
+│       │   └── deos_types.h    (Structs & Types)
+│       └── src/
+│           ├── deos_core.c     (Init & Lifecycle)
+│           ├── deos_dispatch.c (Incoming Msg Routing)
+│           ├── deos_fault.c    (Fault Registry & Streaming)
+│           ├── deos_rx.c       (CAN RX Thread & HW Filters)
+│           ├── deos_tx.c       (CAN TX API)
+│           ├── deos_network.c  (Auto Ping/Pong)
+│           ├── deos_codec.c    (Serialization)
+│           └── deos_router.c   (Cross-network Routing)
+├── src/
+│   └── main.c                  (Example App Integration)
+└── tests/
+    └── protocol/               (ZTEST Unit Tests)
+```
 
-## Application / Core Ayrımı
-**Felsefe:**
-- Application: "Motoru şu açıya döndürmek istiyorum."
-- DEOS Core: "Bu veriyi CAN-FD üzerinden sequence, version ve endian kurallarıyla nasıl serialize/deserialize ederim?"
-- Control Thread: "PID algoritmasını uygulayarak fiziksel donanımı nasıl süreceğim?"
-Bu katmanlar birbirine karışmaz. Malloc kullanılmaz.
-
-## Mevcut Durum (Development Status)
-- ✅ Codec & Validation tamamlandı.
-- ✅ Handler Registration & Dispatch tamamlandı.
-- ✅ TX / RX kuyrukları ve statik worker thread tamamlandı.
-- ✅ Network & Ping/Pong otonom cevabı eklendi.
-- ⚠️ F439ZI için CAN-FD limitasyonu donanımsaldır.
-- 🚧 (PROVISIONAL) Heartbeat payload, Calibration exact payloads ve Ethernet/LoRa framing ICD üzerinde henüz "frozen" olmadığından stub olarak bırakılmıştır.
-# deos-core-protocol-stack
+## 🚧 Mevcut Durum (Development Status)
+- ✅ **Codec & Validation:** Tamamlandı.
+- ✅ **Handler Registration & Dispatching:** Tamamlandı.
+- ✅ **HW Filters & RX/TX Static Threads:** Tamamlandı.
+- ✅ **Auto PING/PONG & Networking:** Tamamlandı.
+- ✅ **Fault Management & Diagnostic Streaming:** Tamamlandı.
+- ⚠️ Geliştirme kartı `nucleo_f439zi` donanımsal olarak CAN-FD desteklememektedir, API CAN-FD kısıtlamasını denetlediği için test/uyarlama senaryolarında donanım kısıtlamalarına dikkat edilmelidir.
+- 🚧 (PROVISIONAL) Yönlendirme (Routing) mantığının farklı fiziksel ağlara (Ethernet vs.) aktarılmasına dair paket yapısı (framing) ICD üzerinde henüz son halini ("frozen") almadığından stub olarak bırakılmıştır.
