@@ -27,7 +27,7 @@ K_MSGQ_DEFINE(rx_msgq, sizeof(struct can_frame), DEOS_RX_QUEUE_SIZE, 4);
 
 static struct k_thread rx_thread_data;
 static K_KERNEL_STACK_DEFINE(rx_thread_stack, DEOS_RX_THREAD_STACK_SIZE);
-static int rx_filter_id = -1;
+static int rx_filter_ids[2] = {-1, -1};
 
 /*
  * CAN RX Callback (Runs in interrupt context)
@@ -105,17 +105,47 @@ int deos_rx_init(void)
         return ret;
     }
 
-    /* Add CAN filter */
-    struct can_filter filter = {
-        .flags = CAN_FILTER_IDE, /* Only care about extended frames */
-        .id = 0,
-        .mask = 0 /* Promiscuous mode for now to support router and normal use */
-    };
+    if (config->router_enabled) {
+        /* Add CAN filter for router (promiscuous for extended DEOS frames) */
+        struct can_filter filter = {
+            .flags = CAN_FILTER_IDE, /* Only care about extended frames */
+            .id = 0,
+            .mask = 0 /* Promiscuous mode */
+        };
 
-    rx_filter_id = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &filter);
-    if (rx_filter_id < 0) {
-        LOG_ERR("Failed to add RX filter: %d", rx_filter_id);
-        return rx_filter_id;
+        rx_filter_ids[0] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &filter);
+        if (rx_filter_ids[0] < 0) {
+            LOG_ERR("Failed to add router RX filter: %d", rx_filter_ids[0]);
+            return rx_filter_ids[0];
+        }
+    } else {
+        /* Filter 1: Local destination */
+        struct can_filter local_filter = {
+            .flags = CAN_FILTER_IDE,
+            .id = ((uint32_t)config->node_id << DEOS_CAN_DESTINATION_SHIFT),
+            .mask = ((uint32_t)DEOS_CAN_DESTINATION_MASK << DEOS_CAN_DESTINATION_SHIFT)
+        };
+        
+        rx_filter_ids[0] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &local_filter);
+        if (rx_filter_ids[0] < 0) {
+            LOG_ERR("Failed to add local RX filter: %d", rx_filter_ids[0]);
+            return rx_filter_ids[0];
+        }
+
+        /* Filter 2: Broadcast destination */
+        struct can_filter broadcast_filter = {
+            .flags = CAN_FILTER_IDE,
+            .id = ((uint32_t)DEOS_NODE_BROADCAST << DEOS_CAN_DESTINATION_SHIFT),
+            .mask = ((uint32_t)DEOS_CAN_DESTINATION_MASK << DEOS_CAN_DESTINATION_SHIFT)
+        };
+        
+        rx_filter_ids[1] = can_add_rx_filter(config->can_dev, deos_can_rx_callback, NULL, &broadcast_filter);
+        if (rx_filter_ids[1] < 0) {
+            LOG_ERR("Failed to add broadcast RX filter: %d", rx_filter_ids[1]);
+            can_remove_rx_filter(config->can_dev, rx_filter_ids[0]); /* Cleanup */
+            rx_filter_ids[0] = -1;
+            return rx_filter_ids[1];
+        }
     }
 
     LOG_DBG("RX infrastructure initialized");
