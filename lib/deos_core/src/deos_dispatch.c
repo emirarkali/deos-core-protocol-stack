@@ -148,6 +148,9 @@ void deos_dispatch(const deos_message_t *msg)
                 LOG_WRN("Handler returned error %d for Cmd: 0x%X", ret, msg->command);
             }
             handled = true;
+            /* TODO(architecture): If this is a BROADCAST message, should we break here 
+             * or continue dispatching to ALL other local nodes that registered this handler? 
+             * Current DEOS semantics deliver it once to the first matching handler. */
             break; /* Assume one handler per command */
         }
     }

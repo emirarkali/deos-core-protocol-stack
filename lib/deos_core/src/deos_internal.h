@@ -9,6 +9,8 @@
 extern "C" {
 #endif
 
+#define DEOS_MAX_LOCAL_NODES 4
+
 /*
  * Endian Helpers (Little-Endian is default for DEOS wire format)
  */

@@ -8,7 +8,6 @@
 LOG_MODULE_REGISTER(deos_fault, LOG_LEVEL_INF);
 
 #define DEOS_MAX_FAULT_RECORDS 32
-#define DEOS_MAX_LOCAL_NODES   4
 
 /*
  * Fault Transfer Context for GET_FAULTS

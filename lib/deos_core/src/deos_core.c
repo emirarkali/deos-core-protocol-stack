@@ -8,8 +8,6 @@ LOG_MODULE_REGISTER(deos_core, LOG_LEVEL_INF);
 static struct deos_config core_config;
 static bool is_initialized = false;
 
-#define DEOS_MAX_LOCAL_NODES 4
-
 struct deos_local_node_context {
     deos_node_id_t node_id;
     atomic_t tx_sequence;
