@@ -12,9 +12,9 @@ extern "C" {
 
 /*
  * Maximum theoretical command payload for DEOS
- * (64 bytes CAN-FD payload - 3 bytes header)
+ * (64 bytes CAN-FD payload - 4 bytes common header)
  */
-#define DEOS_MAX_PAYLOAD_LEN 61
+#define DEOS_MAX_PAYLOAD_LEN 60
 
 /*
  * Core DEOS Message Structure

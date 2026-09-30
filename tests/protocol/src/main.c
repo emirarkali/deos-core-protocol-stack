@@ -71,7 +71,7 @@ ZTEST(deos_protocol, test_06_invalid_source_reject)
 {
     TC_PRINT("Test: Ensures that a CAN frame with an invalid source node ID is rejected during decoding.\n");
     /* Decode level reject */
-    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 3, .data = {0x10, 0, 0} };
+    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 4, .data = {0x10, 0, 0, 0} };
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_STEERING, DEOS_NODE_INVALID, &frame.id);
     
     deos_message_t msg;
@@ -82,7 +82,7 @@ ZTEST(deos_protocol, test_06_invalid_source_reject)
 ZTEST(deos_protocol, test_07_invalid_destination_reject)
 {
     TC_PRINT("Test: Ensures that a CAN frame with an invalid destination node ID is rejected during decoding.\n");
-    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 3, .data = {0x10, 0, 0} };
+    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 4, .data = {0x10, 0, 0, 0} };
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_INVALID, DEOS_NODE_MAIN_STM32, &frame.id);
     
     deos_message_t msg;
@@ -257,4 +257,81 @@ ZTEST(deos_node_fault_test, test_02_legacy_wrappers)
     zassert_equal(ret, 0, "Legacy wrapper should succeed on primary node");
     
     zassert_true(deos_fault_is_active_for_node(DEOS_NODE_STEERING, 0x1234), "Fault should be active on primary node");
+}
+
+ZTEST_SUITE(deos_codec_test, NULL, NULL, NULL, NULL, NULL);
+
+static void do_roundtrip_test(uint8_t payload_size) {
+    deos_message_t tx_msg = {0};
+    tx_msg.priority = DEOS_PRIO_CONTROL;
+    tx_msg.message_class = DEOS_CLASS_COMMAND;
+    tx_msg.service = DEOS_SERVICE_STEERING;
+    tx_msg.destination = DEOS_NODE_STEERING;
+    tx_msg.source = DEOS_NODE_MAIN_STM32;
+    tx_msg.command = 0xAA;
+    tx_msg.version = DEOS_PROTOCOL_VERSION;
+    tx_msg.sequence = 0x55;
+    tx_msg.payload_len = payload_size;
+    
+    for (int i=0; i<payload_size; i++) {
+        tx_msg.payload[i] = (uint8_t)(i & 0xFF);
+    }
+    
+    struct can_frame frame = {0};
+    int ret = deos_encode_frame(&tx_msg, &frame);
+    zassert_equal(ret, 0, "Encode failed for payload %d", payload_size);
+    
+    uint8_t physical_len = can_dlc_to_bytes(frame.dlc);
+    zassert_true(physical_len >= 4 + payload_size, "Physical length %d too small for semantic %d", physical_len, 4 + payload_size);
+    
+    deos_message_t rx_msg = {0};
+    ret = deos_decode_frame(&frame, &rx_msg);
+    zassert_equal(ret, 0, "Decode failed for payload %d", payload_size);
+    zassert_equal(rx_msg.payload_len, payload_size, "Length mismatch");
+    zassert_equal(rx_msg.command, 0xAA, "Command mismatch");
+    
+    if (payload_size > 0) {
+        zassert_equal(memcmp(tx_msg.payload, rx_msg.payload, payload_size), 0, "Payload mismatch for size %d", payload_size);
+    }
+}
+
+ZTEST(deos_codec_test, test_codec_01_roundtrip_boundaries) {
+    TC_PRINT("Test: Encode-decode roundtrip for various payload sizes\n");
+    uint8_t sizes[] = {0, 1, 4, 5, 8, 9, 10, 12, 13, 16, 20, 28, 44, 60};
+    for (int i=0; i<sizeof(sizes)/sizeof(sizes[0]); i++) {
+        do_roundtrip_test(sizes[i]);
+    }
+}
+
+ZTEST(deos_codec_test, test_codec_02_invalid_frames) {
+    TC_PRINT("Test: Invalid frames (length, physical limits)\n");
+    struct can_frame frame = {0};
+    frame.flags = CAN_FRAME_IDE | CAN_FRAME_FDF;
+    deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_STEERING, DEOS_NODE_MAIN_STM32, &frame.id);
+    
+    deos_message_t rx_msg = {0};
+    
+    /* 1. physical < 4 */
+    frame.dlc = can_bytes_to_dlc(3);
+    int ret = deos_decode_frame(&frame, &rx_msg);
+    zassert_equal(ret, -EMSGSIZE, "Expected -EMSGSIZE");
+    
+    /* 2. Length > 60 */
+    frame.dlc = can_bytes_to_dlc(64);
+    frame.data[0] = DEOS_PROTOCOL_VERSION;
+    frame.data[3] = 61; /* payload_len */
+    ret = deos_decode_frame(&frame, &rx_msg);
+    zassert_equal(ret, -EMSGSIZE, "Expected -EMSGSIZE for Length > 60");
+    
+    /* 3. Length + 4 > physical */
+    frame.dlc = can_bytes_to_dlc(16);
+    frame.data[3] = 20; /* 4 + 20 = 24 > 16 */
+    ret = deos_decode_frame(&frame, &rx_msg);
+    zassert_equal(ret, -EMSGSIZE, "Expected -EMSGSIZE for Length mismatch");
+}
+
+ZTEST(deos_codec_test, test_codec_03_fault_and_ping_sizes) {
+    TC_PRINT("Test: Verify PING (4 bytes) and FAULT (10 bytes) response sizes\n");
+    do_roundtrip_test(4); /* Ping */
+    do_roundtrip_test(10); /* Fault response */
 }

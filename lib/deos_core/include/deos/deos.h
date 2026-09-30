@@ -32,7 +32,7 @@ int deos_start(void);
  * @param service Service ID.
  * @param command Command ID.
  * @param payload Pointer to the command-specific payload.
- * @param payload_len Length of the payload (max 61 bytes).
+ * @param payload_len Length of the payload (max 60 bytes).
  * @return 0 on success, negative error code on failure.
  */
 int deos_send(

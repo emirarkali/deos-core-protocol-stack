@@ -105,7 +105,7 @@ static void my_steering_cmd_handler(const deos_message_t *msg, void *user_data)
 
 ## 5. Mesaj Gönderme
 
-Ağdaki başka bir node'a veri veya komut göndermek için kullanılır. Mesajlar CAN-FD sınırları gereği maksimum **64 byte** payload içerebilir.
+Ağdaki başka bir node'a veri veya komut göndermek için kullanılır. Mesajlar CAN-FD sınırları ve DEOS header'ı gereği maksimum **60 byte** command-specific payload içerebilir.
 
 ### Herhangi Bir Local Node Üzerinden Mesaj Gönderme
 

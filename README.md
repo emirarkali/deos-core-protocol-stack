@@ -10,7 +10,7 @@ Traction, Steering, Brake gibi fiziksel kontrol düğümleri (node'lar), doğrud
 
 ## 🌟 Temel Özellikler (Key Features)
 
-- **Tamamen CAN-FD Tabanlı:** 64 byte'a kadar payload ve yüksek hız. (Classic CAN desteği veya fallback mekanizması yoktur, donanım desteklemiyorsa `ENOTSUP` döner).
+- **Tamamen CAN-FD Tabanlı:** 60 byte'a kadar command-specific payload ve yüksek hız. (Classic CAN desteği veya fallback mekanizması yoktur, donanım desteklemiyorsa `ENOTSUP` döner).
 - **Sıfır Dinamik Bellek (Zero-Allocation):** `malloc` veya `free` kullanılmaz. Tamamen RAM dostu, statik ve deterministik bellek yönetimi (MISRA C / safety-critical yaklaşımlarına uygun).
 - **Hosted Local Nodes (Çoklu Düğüm Desteği):** Aynı fiziksel donanım (MCU) ve CAN arayüzü üzerinde, birbirinden tamamen izole (bağımsız sequence counter, handler ve fault tabloları) birden çok mantıksal (logical) DEOS Node barındırma yeteneği.
 - **Node-Specific Fault Management:** Sistemdeki hataların tespiti, saklanması (latching), temizlenmesi ve diagnostik akışlar (`GET_FAULTS`, `CLEAR_FAULTS`) her bir mantıksal düğüm (local node) için tamamen izole ve otonom olarak yönetilir.
@@ -35,6 +35,22 @@ Tüm DEOS mesajları 29-bit Extended Identifier kullanır:
 | **21..16** | 6 bit | **Service ID:** İlgili servis (Steering, Brake, Power vb.) |
 | **15..8** | 8 bit | **Destination Node:** Hedef node ID (0xFF Broadcast) |
 | **7..0** | 8 bit | **Source Node:** Kaynak node ID |
+
+## 📦 DEOS CAN-FD Data Format (Payload Layout)
+
+DEOS Core ortak veri başlığı (Common Data Header) 4 byte'tır.
+
+| Byte Offset | Alan | Açıklama |
+| :--- | :--- | :--- |
+| **0** | Version | Protocol Version |
+| **1** | Sequence | Mesaj sıra numarası |
+| **2** | Command | Command ID |
+| **3** | Length | Command-specific payload length |
+| **4..N** | Payload | Command-specific Payload |
+
+Geriye kalan fiziksel CAN-FD byte'ları **zero padding** (sıfır dolgusu) ile doldurulur.
+
+> **Önemli:** `Length` alanı sadece geçerli command-specific payload uzunluğunu belirtir ve Version, Sequence, Command veya Length'in kendisini içermez. Maximum command-specific payload = **60 bytes**'tır.
 
 ## 🚀 Hızlı Başlangıç (Quick Start)
 

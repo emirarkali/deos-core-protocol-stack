@@ -129,8 +129,8 @@ int deos_rx_start(void)
         }
     } else {
         /* Filter for all registered local nodes */
-        deos_node_id_t local_nodes[4]; /* Max 4 nodes currently */
-        int num_nodes = deos_get_local_nodes(local_nodes, 4);
+        deos_node_id_t local_nodes[DEOS_MAX_LOCAL_NODES];
+        int num_nodes = deos_get_local_nodes(local_nodes, DEOS_MAX_LOCAL_NODES);
         
         int filter_idx = 0;
         for (int i = 0; i < num_nodes; i++) {

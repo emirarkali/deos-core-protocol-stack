@@ -104,25 +104,23 @@ int deos_encode_frame(
     /* Set as Extended and CAN-FD */
     frame->flags = CAN_FRAME_IDE | CAN_FRAME_FDF;
 
-    /* Frame length = version(1) + sequence(1) + command(1) + payload_len */
-    frame->dlc = can_bytes_to_dlc(3 + msg->payload_len); 
-    /* NOTE: Zephyr's can_bytes_to_dlc takes length, but can_frame->dlc stores DLC.
-       Wait, for CAN-FD, it is best to set actual byte length in frame->dlc if using recent Zephyr?
-       Actually, modern Zephyr (>= 3.x) uses frame->dlc as length directly or uses DLC. Let's check struct can_frame */
-    frame->dlc = 3 + msg->payload_len; // we will pad if needed, but Zephyr CAN API uses `dlc` to store byte length actually.
+    /* Frame length = version(1) + sequence(1) + command(1) + length(1) + payload_len */
+    uint8_t semantic_len = 4 + msg->payload_len;
+    frame->dlc = can_bytes_to_dlc(semantic_len);
 
     frame->data[0] = msg->version;
     frame->data[1] = msg->sequence;
     frame->data[2] = msg->command;
+    frame->data[3] = (uint8_t)msg->payload_len;
 
     if (msg->payload_len > 0) {
-        memcpy(&frame->data[3], msg->payload, msg->payload_len);
+        memcpy(&frame->data[4], msg->payload, msg->payload_len);
     }
 
     /* Zero out the rest of the CAN-FD frame payload to avoid dirty bytes if it rounds up DLC */
-    uint8_t actual_len = can_dlc_to_bytes(can_bytes_to_dlc(frame->dlc));
-    if (actual_len > frame->dlc) {
-        memset(&frame->data[frame->dlc], 0, actual_len - frame->dlc);
+    uint8_t physical_len = can_dlc_to_bytes(frame->dlc);
+    if (physical_len > semantic_len) {
+        memset(&frame->data[semantic_len], 0, physical_len - semantic_len);
     }
 
     return 0;
@@ -144,15 +142,11 @@ int deos_decode_frame(
         return -EPROTO; // Only CAN-FD supported
     }
 
-    /* Determine actual received length */
-    uint8_t rx_len = can_dlc_to_bytes(can_bytes_to_dlc(frame->dlc));
+    /* Determine actual received physical length */
+    uint8_t physical_len = can_dlc_to_bytes(frame->dlc);
     
-    if (rx_len < 3) {
-        return -EMSGSIZE; // Too small
-    }
-    
-    if (rx_len > 64) {
-        return -EMSGSIZE; // Too large
+    if (physical_len < 4) {
+        return -EMSGSIZE; // Too small for header
     }
 
     int ret = deos_can_id_decode(frame->id, msg);
@@ -164,12 +158,16 @@ int deos_decode_frame(
         return -EPROTO;
     }
 
-    msg->version  = frame->data[0];
-    msg->sequence = frame->data[1];
-    msg->command  = frame->data[2];
+    msg->version     = frame->data[0];
+    msg->sequence    = frame->data[1];
+    msg->command     = frame->data[2];
+    msg->payload_len = frame->data[3];
 
-    msg->payload_len = rx_len - 3;
     if (msg->payload_len > DEOS_MAX_PAYLOAD_LEN) {
+        return -EMSGSIZE;
+    }
+
+    if (4 + msg->payload_len > physical_len) {
         return -EMSGSIZE;
     }
 
@@ -179,7 +177,7 @@ int deos_decode_frame(
     }
 
     if (msg->payload_len > 0) {
-        memcpy(msg->payload, &frame->data[3], msg->payload_len);
+        memcpy(msg->payload, &frame->data[4], msg->payload_len);
     }
 
     return 0;
