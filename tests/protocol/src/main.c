@@ -5,9 +5,9 @@
 
 ZTEST_SUITE(deos_protocol, NULL, NULL, NULL, NULL, NULL);
 
-/* Test: Verifies that encoding a CAN ID and then decoding it results in the original fields. */
 ZTEST(deos_protocol, test_01_can_id_encode_decode_roundtrip)
 {
+    TC_PRINT("Test: Verifies that encoding a CAN ID and then decoding it results in the original fields.\n");
     uint32_t can_id = 0;
     int ret = deos_can_id_encode(
         DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING,
@@ -26,9 +26,9 @@ ZTEST(deos_protocol, test_01_can_id_encode_decode_roundtrip)
     zassert_equal(msg.source, DEOS_NODE_MAIN_STM32, "Source mismatch");
 }
 
-/* Test: Verifies that encoding works with the maximum possible values for all fields within a 29-bit CAN ID. */
 ZTEST(deos_protocol, test_02_maximum_valid_29bit_id_fields)
 {
+    TC_PRINT("Test: Verifies that encoding works with the maximum possible values for all fields within a 29-bit CAN ID.\n");
     uint32_t can_id = 0;
     int ret = deos_can_id_encode(
         DEOS_CAN_PRIORITY_MASK, DEOS_CAN_MESSAGE_CLASS_MASK, 
@@ -37,9 +37,9 @@ ZTEST(deos_protocol, test_02_maximum_valid_29bit_id_fields)
     zassert_equal(ret, 0, "Max fields encode failed");
 }
 
-/* Test: Ensures that an invalid priority value is rejected during CAN ID encoding. */
 ZTEST(deos_protocol, test_03_invalid_priority_reject)
 {
+    TC_PRINT("Test: Ensures that an invalid priority value is rejected during CAN ID encoding.\n");
     uint32_t can_id = 0;
     int ret = deos_can_id_encode(
         8 /* Invalid priority */, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING,
@@ -47,9 +47,9 @@ ZTEST(deos_protocol, test_03_invalid_priority_reject)
     zassert_not_equal(ret, 0, "Invalid priority should fail");
 }
 
-/* Test: Ensures that an invalid message class value is rejected during CAN ID encoding. */
 ZTEST(deos_protocol, test_04_invalid_message_class_reject)
 {
+    TC_PRINT("Test: Ensures that an invalid message class value is rejected during CAN ID encoding.\n");
     uint32_t can_id = 0;
     int ret = deos_can_id_encode(
         DEOS_PRIO_CONTROL, 16 /* Invalid class */, DEOS_SERVICE_STEERING,
@@ -57,9 +57,9 @@ ZTEST(deos_protocol, test_04_invalid_message_class_reject)
     zassert_not_equal(ret, 0, "Invalid class should fail");
 }
 
-/* Test: Ensures that an invalid service value is rejected during CAN ID encoding. */
 ZTEST(deos_protocol, test_05_invalid_service_reject)
 {
+    TC_PRINT("Test: Ensures that an invalid service value is rejected during CAN ID encoding.\n");
     uint32_t can_id = 0;
     int ret = deos_can_id_encode(
         DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, 64 /* Invalid service */,
@@ -67,9 +67,9 @@ ZTEST(deos_protocol, test_05_invalid_service_reject)
     zassert_not_equal(ret, 0, "Invalid service should fail");
 }
 
-/* Test: Ensures that a CAN frame with an invalid source node ID is rejected during decoding. */
 ZTEST(deos_protocol, test_06_invalid_source_reject)
 {
+    TC_PRINT("Test: Ensures that a CAN frame with an invalid source node ID is rejected during decoding.\n");
     /* Decode level reject */
     struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 3, .data = {0x10, 0, 0} };
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_STEERING, DEOS_NODE_INVALID, &frame.id);
@@ -79,9 +79,9 @@ ZTEST(deos_protocol, test_06_invalid_source_reject)
     zassert_equal(ret, -EPROTO, "Invalid source should return EPROTO");
 }
 
-/* Test: Ensures that a CAN frame with an invalid destination node ID is rejected during decoding. */
 ZTEST(deos_protocol, test_07_invalid_destination_reject)
 {
+    TC_PRINT("Test: Ensures that a CAN frame with an invalid destination node ID is rejected during decoding.\n");
     struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 3, .data = {0x10, 0, 0} };
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_INVALID, DEOS_NODE_MAIN_STM32, &frame.id);
     
@@ -90,17 +90,17 @@ ZTEST(deos_protocol, test_07_invalid_destination_reject)
     zassert_equal(ret, -EPROTO, "Invalid dest should return EPROTO");
 }
 
-/* Test: Ensures that initializing DEOS Core with an invalid node ID fails. */
 ZTEST(deos_protocol, test_08_local_node_invalid_init_reject)
 {
+    TC_PRINT("Test: Ensures that initializing DEOS Core with an invalid node ID fails.\n");
     struct deos_config config = { .node_id = DEOS_NODE_INVALID };
     int ret = deos_init(&config);
     zassert_equal(ret, -EINVAL, "Init with invalid node should fail");
 }
 
-/* Test: Ensures that initializing DEOS Core with the broadcast node ID fails. */
 ZTEST(deos_protocol, test_09_local_node_broadcast_init_reject)
 {
+    TC_PRINT("Test: Ensures that initializing DEOS Core with the broadcast node ID fails.\n");
     struct deos_config config = { .node_id = DEOS_NODE_BROADCAST };
     int ret = deos_init(&config);
     zassert_equal(ret, -EINVAL, "Init with broadcast node should fail");
@@ -108,18 +108,18 @@ ZTEST(deos_protocol, test_09_local_node_broadcast_init_reject)
 
 ZTEST_SUITE(deos_fault_test, NULL, NULL, NULL, NULL, NULL);
 
-/* Test: Verifies that raising a fault with ID 0 is rejected. */
 ZTEST(deos_fault_test, test_fault_01_reject_zero_id)
 {
+    TC_PRINT("Test: Verifies that raising a fault with ID 0 is rejected.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     int ret = deos_fault_raise(0, DEOS_FAULT_SEVERITY_ERROR);
     zassert_equal(ret, -EINVAL, "Fault ID 0 should be rejected");
 }
 
-/* Test: Verifies that a valid new fault can be raised successfully and marked as active. */
 ZTEST(deos_fault_test, test_fault_02_new_fault_raise)
 {
+    TC_PRINT("Test: Verifies that a valid new fault can be raised successfully and marked as active.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     int ret = deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
@@ -127,9 +127,9 @@ ZTEST(deos_fault_test, test_fault_02_new_fault_raise)
     zassert_true(deos_fault_is_active(0x0100), "Fault should be active");
 }
 
-/* Test: Verifies that raising an already active fault again is handled safely. */
 ZTEST(deos_fault_test, test_fault_03_same_fault_repeated)
 {
+    TC_PRINT("Test: Verifies that raising an already active fault again is handled safely.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
@@ -140,9 +140,9 @@ ZTEST(deos_fault_test, test_fault_03_same_fault_repeated)
     zassert_true(deos_fault_is_active(0x0100), "Fault should still be active");
 }
 
-/* Test: Verifies that setting an active fault to inactive updates its state correctly. */
 ZTEST(deos_fault_test, test_fault_04_set_inactive)
 {
+    TC_PRINT("Test: Verifies that setting an active fault to inactive updates its state correctly.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
@@ -150,9 +150,9 @@ ZTEST(deos_fault_test, test_fault_04_set_inactive)
     zassert_false(deos_fault_is_active(0x0100), "Fault should be inactive");
 }
 
-/* Test: Verifies that latching a fault works and keeps the fault active. */
 ZTEST(deos_fault_test, test_fault_05_latch)
 {
+    TC_PRINT("Test: Verifies that latching a fault works and keeps the fault active.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
@@ -160,9 +160,9 @@ ZTEST(deos_fault_test, test_fault_05_latch)
     zassert_true(deos_fault_is_active(0x0100), "Latched fault should be active");
 }
 
-/* Test: Verifies that a specific single fault can be cleared. */
 ZTEST(deos_fault_test, test_fault_06_clear_single)
 {
+    TC_PRINT("Test: Verifies that a specific single fault can be cleared.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
@@ -170,9 +170,9 @@ ZTEST(deos_fault_test, test_fault_06_clear_single)
     zassert_false(deos_fault_is_active(0x0100), "Fault should be cleared");
 }
 
-/* Test: Verifies that all active faults are cleared when clear_all is called. */
 ZTEST(deos_fault_test, test_fault_07_clear_all)
 {
+    TC_PRINT("Test: Verifies that all active faults are cleared when clear_all is called.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
@@ -182,9 +182,9 @@ ZTEST(deos_fault_test, test_fault_07_clear_all)
     zassert_false(deos_fault_is_active(0x0101), "Fault 0x0101 should be cleared");
 }
 
-/* Test: Verifies that the fault table safely rejects new faults with -ENOSPC when it reaches maximum capacity. */
 ZTEST(deos_fault_test, test_fault_08_max_table_full)
 {
+    TC_PRINT("Test: Verifies that the fault table safely rejects new faults with -ENOSPC when it reaches maximum capacity.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     for (int i = 1; i <= 32; i++) {
@@ -196,23 +196,23 @@ ZTEST(deos_fault_test, test_fault_08_max_table_full)
 
 ZTEST_SUITE(deos_local_node_test, NULL, NULL, NULL, NULL, NULL);
 
-/* Test: Verifies that the primary node initialized in the config is recognized as a local node. */
 ZTEST(deos_local_node_test, test_local_node_01_primary_node_is_local)
 {
+    TC_PRINT("Test: Verifies that the primary node initialized in the config is recognized as a local node.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     zassert_true(deos_is_local_node(DEOS_NODE_STEERING), "Primary node should be local");
 }
 
-/* Test: Verifies that an arbitrary unregistered node ID is correctly identified as non-local. */
 ZTEST(deos_local_node_test, test_local_node_02_unregistered_node_is_not_local)
 {
+    TC_PRINT("Test: Verifies that an arbitrary unregistered node ID is correctly identified as non-local.\n");
     zassert_false(deos_is_local_node(DEOS_NODE_BRAKE), "Unregistered node should not be local");
 }
 
-/* Test: Verifies that the invalid node ID is not recognized as a local node. */
 ZTEST(deos_local_node_test, test_local_node_03_invalid_node_is_not_local)
 {
+    TC_PRINT("Test: Verifies that the invalid node ID is not recognized as a local node.\n");
     zassert_false(deos_is_local_node(DEOS_NODE_INVALID), "Invalid node should not be local");
 }
 
@@ -226,9 +226,9 @@ ZTEST(deos_local_node_test, test_local_node_03_invalid_node_is_not_local)
 
 ZTEST_SUITE(deos_node_fault_test, NULL, NULL, NULL, NULL, NULL);
 
-/* Test: Verifies that node-specific fault operations isolate faults (e.g. an unregistered node cannot raise faults). */
 ZTEST(deos_node_fault_test, test_01_multi_node_fault_isolation)
 {
+    TC_PRINT("Test: Verifies that node-specific fault operations isolate faults (e.g. an unregistered node cannot raise faults).\n");
     /* In a mocked CAN environment, these nodes would be registered via deos_register_local_node.
        Since we bypass init in these partial tests, we just assume DEOS_NODE_STEERING 
        is primary and active. We check unregistered behavior for DEOS_NODE_BRAKE. */
@@ -247,9 +247,9 @@ ZTEST(deos_node_fault_test, test_01_multi_node_fault_isolation)
        we can't easily test it here. We document the test logic. */
 }
 
-/* Test: Verifies that the legacy global fault wrappers correctly route fault operations to the primary node. */
 ZTEST(deos_node_fault_test, test_02_legacy_wrappers)
 {
+    TC_PRINT("Test: Verifies that the legacy global fault wrappers correctly route fault operations to the primary node.\n");
     struct deos_config config = { .node_id = DEOS_NODE_STEERING };
     deos_init(&config);
     
