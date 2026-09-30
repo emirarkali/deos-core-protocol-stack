@@ -8,7 +8,15 @@ extern "C" {
 /*
  * DEOS Protocol Version
  */
-#define DEOS_PROTOCOL_VERSION 0x10
+#define DEOS_PROTOCOL_VERSION 0x11
+
+/* Common Header Layout */
+#define DEOS_COMMON_HEADER_SIZE 4
+#define DEOS_VERSION_OFFSET     0
+#define DEOS_SEQUENCE_OFFSET    1
+#define DEOS_COMMAND_OFFSET     2
+#define DEOS_LENGTH_OFFSET      3
+#define DEOS_PAYLOAD_OFFSET     4
 
 /*
  * 29-bit CAN Extended Identifier

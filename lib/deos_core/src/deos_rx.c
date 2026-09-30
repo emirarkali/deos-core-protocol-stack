@@ -27,8 +27,8 @@ K_MSGQ_DEFINE(rx_msgq, sizeof(struct can_frame), DEOS_RX_QUEUE_SIZE, 4);
 
 static struct k_thread rx_thread_data;
 static K_KERNEL_STACK_DEFINE(rx_thread_stack, DEOS_RX_THREAD_STACK_SIZE);
-#define DEOS_MAX_RX_FILTERS 6
-static int rx_filter_ids[DEOS_MAX_RX_FILTERS] = {-1, -1, -1, -1, -1, -1};
+#define DEOS_MAX_RX_FILTERS (DEOS_MAX_LOCAL_NODES + 1)
+static int rx_filter_ids[DEOS_MAX_RX_FILTERS];
 
 /*
  * CAN RX Callback (Runs in interrupt context)
@@ -46,7 +46,7 @@ static void deos_can_rx_callback(const struct device *dev, struct can_frame *fra
  */
 static void deos_rx_thread_func(void *p1, void *p2, void *p3)
 {
-    struct can_frame frame;
+    struct can_frame frame = {0};
     deos_message_t msg;
 
     LOG_INF("DEOS RX Thread started");
@@ -76,6 +76,10 @@ int deos_rx_init(void)
     const struct deos_config *config = deos_get_config();
     if (!config || !config->can_dev) {
         return -ENODEV;
+    }
+
+    for (int i = 0; i < DEOS_MAX_RX_FILTERS; i++) {
+        rx_filter_ids[i] = -1;
     }
 
     if (!device_is_ready(config->can_dev)) {

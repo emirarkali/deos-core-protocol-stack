@@ -101,20 +101,20 @@ int deos_encode_frame(
         return ret;
     }
 
-    /* Set as Extended and CAN-FD */
-    frame->flags = CAN_FRAME_IDE | CAN_FRAME_FDF;
+    /* Set as Extended, CAN-FD and Bit Rate Switch (BRS) */
+    frame->flags = CAN_FRAME_IDE | CAN_FRAME_FDF | CAN_FRAME_BRS;
 
-    /* Frame length = version(1) + sequence(1) + command(1) + length(1) + payload_len */
-    uint8_t semantic_len = 4 + msg->payload_len;
+    /* Frame length = header size + payload_len */
+    uint8_t semantic_len = DEOS_COMMON_HEADER_SIZE + msg->payload_len;
     frame->dlc = can_bytes_to_dlc(semantic_len);
 
-    frame->data[0] = msg->version;
-    frame->data[1] = msg->sequence;
-    frame->data[2] = msg->command;
-    frame->data[3] = (uint8_t)msg->payload_len;
+    frame->data[DEOS_VERSION_OFFSET]  = msg->version;
+    frame->data[DEOS_SEQUENCE_OFFSET] = msg->sequence;
+    frame->data[DEOS_COMMAND_OFFSET]  = msg->command;
+    frame->data[DEOS_LENGTH_OFFSET]   = (uint8_t)msg->payload_len;
 
     if (msg->payload_len > 0) {
-        memcpy(&frame->data[4], msg->payload, msg->payload_len);
+        memcpy(&frame->data[DEOS_PAYLOAD_OFFSET], msg->payload, msg->payload_len);
     }
 
     /* Zero out the rest of the CAN-FD frame payload to avoid dirty bytes if it rounds up DLC */
@@ -145,7 +145,7 @@ int deos_decode_frame(
     /* Determine actual received physical length */
     uint8_t physical_len = can_dlc_to_bytes(frame->dlc);
     
-    if (physical_len < 4) {
+    if (physical_len < DEOS_COMMON_HEADER_SIZE) {
         return -EMSGSIZE; // Too small for header
     }
 
@@ -158,26 +158,26 @@ int deos_decode_frame(
         return -EPROTO;
     }
 
-    msg->version     = frame->data[0];
-    msg->sequence    = frame->data[1];
-    msg->command     = frame->data[2];
-    msg->payload_len = frame->data[3];
+    msg->version     = frame->data[DEOS_VERSION_OFFSET];
+    msg->sequence    = frame->data[DEOS_SEQUENCE_OFFSET];
+    msg->command     = frame->data[DEOS_COMMAND_OFFSET];
+    msg->payload_len = frame->data[DEOS_LENGTH_OFFSET];
 
     if (msg->payload_len > DEOS_MAX_PAYLOAD_LEN) {
         return -EMSGSIZE;
     }
 
-    if (4 + msg->payload_len > physical_len) {
+    if (DEOS_COMMON_HEADER_SIZE + msg->payload_len > physical_len) {
         return -EMSGSIZE;
     }
 
-    /* Validate protocol version */
-    if ((msg->version & 0xF0) != (DEOS_PROTOCOL_VERSION & 0xF0)) {
+    /* Validate protocol version - Exact match required for 4-byte header format */
+    if (msg->version != DEOS_PROTOCOL_VERSION) {
         return -EPROTONOSUPPORT;
     }
 
     if (msg->payload_len > 0) {
-        memcpy(msg->payload, &frame->data[4], msg->payload_len);
+        memcpy(msg->payload, &frame->data[DEOS_PAYLOAD_OFFSET], msg->payload_len);
     }
 
     return 0;

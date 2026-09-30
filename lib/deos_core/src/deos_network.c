@@ -29,6 +29,11 @@ int deos_send_ping(
 
 void deos_handle_ping(const deos_message_t *msg)
 {
+    if (msg->destination == DEOS_NODE_BROADCAST) {
+        LOG_WRN("Broadcast PING from 0x%02X ignored", msg->source);
+        return;
+    }
+
     if (msg->payload_len != 4) {
         LOG_WRN("Invalid PING payload length: %d", msg->payload_len);
         return;

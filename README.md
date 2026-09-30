@@ -10,7 +10,7 @@ Traction, Steering, Brake gibi fiziksel kontrol düğümleri (node'lar), doğrud
 
 ## 🌟 Temel Özellikler (Key Features)
 
-- **Tamamen CAN-FD Tabanlı:** 60 byte'a kadar command-specific payload ve yüksek hız. (Classic CAN desteği veya fallback mekanizması yoktur, donanım desteklemiyorsa `ENOTSUP` döner).
+- **Tamamen CAN-FD Tabanlı:** 60 byte'a kadar command-specific payload ve yüksek hız. (Classic CAN desteği veya fallback mekanizması yoktur, donanım desteklemiyorsa `ENOTSUP` döner). BRS (Bit Rate Switch) aktif olarak kullanılır; controller data-phase bitrate ayarı board/devicetree/Kconfig tarafından sağlanmalıdır.
 - **Sıfır Dinamik Bellek (Zero-Allocation):** `malloc` veya `free` kullanılmaz. Tamamen RAM dostu, statik ve deterministik bellek yönetimi (MISRA C / safety-critical yaklaşımlarına uygun).
 - **Hosted Local Nodes (Çoklu Düğüm Desteği):** Aynı fiziksel donanım (MCU) ve CAN arayüzü üzerinde, birbirinden tamamen izole (bağımsız sequence counter, handler ve fault tabloları) birden çok mantıksal (logical) DEOS Node barındırma yeteneği.
 - **Node-Specific Fault Management:** Sistemdeki hataların tespiti, saklanması (latching), temizlenmesi ve diagnostik akışlar (`GET_FAULTS`, `CLEAR_FAULTS`) her bir mantıksal düğüm (local node) için tamamen izole ve otonom olarak yönetilir.

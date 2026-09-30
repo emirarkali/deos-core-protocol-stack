@@ -71,7 +71,7 @@ ZTEST(deos_protocol, test_06_invalid_source_reject)
 {
     TC_PRINT("Test: Ensures that a CAN frame with an invalid source node ID is rejected during decoding.\n");
     /* Decode level reject */
-    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 4, .data = {0x10, 0, 0, 0} };
+    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF | CAN_FRAME_BRS, .dlc = 4, .data = {DEOS_PROTOCOL_VERSION, 0, 0, 0} };
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_STEERING, DEOS_NODE_INVALID, &frame.id);
     
     deos_message_t msg;
@@ -82,7 +82,7 @@ ZTEST(deos_protocol, test_06_invalid_source_reject)
 ZTEST(deos_protocol, test_07_invalid_destination_reject)
 {
     TC_PRINT("Test: Ensures that a CAN frame with an invalid destination node ID is rejected during decoding.\n");
-    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF, .dlc = 4, .data = {0x10, 0, 0, 0} };
+    struct can_frame frame = { .flags = CAN_FRAME_IDE | CAN_FRAME_FDF | CAN_FRAME_BRS, .dlc = 4, .data = {DEOS_PROTOCOL_VERSION, 0, 0, 0} };
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_INVALID, DEOS_NODE_MAIN_STM32, &frame.id);
     
     deos_message_t msg;
@@ -306,7 +306,7 @@ ZTEST(deos_codec_test, test_codec_01_roundtrip_boundaries) {
 ZTEST(deos_codec_test, test_codec_02_invalid_frames) {
     TC_PRINT("Test: Invalid frames (length, physical limits)\n");
     struct can_frame frame = {0};
-    frame.flags = CAN_FRAME_IDE | CAN_FRAME_FDF;
+    frame.flags = CAN_FRAME_IDE | CAN_FRAME_FDF | CAN_FRAME_BRS;
     deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_STEERING, DEOS_NODE_MAIN_STM32, &frame.id);
     
     deos_message_t rx_msg = {0};
@@ -334,4 +334,24 @@ ZTEST(deos_codec_test, test_codec_03_fault_and_ping_sizes) {
     TC_PRINT("Test: Verify PING (4 bytes) and FAULT (10 bytes) response sizes\n");
     do_roundtrip_test(4); /* Ping */
     do_roundtrip_test(10); /* Fault response */
+}
+
+ZTEST(deos_codec_test, test_codec_04_version_validation) {
+    TC_PRINT("Test: Ensure v1.0 frames are rejected due to exact version match requirement\n");
+    struct can_frame frame = {0};
+    frame.flags = CAN_FRAME_IDE | CAN_FRAME_FDF | CAN_FRAME_BRS;
+    deos_can_id_encode(DEOS_PRIO_CONTROL, DEOS_CLASS_COMMAND, DEOS_SERVICE_STEERING, DEOS_NODE_STEERING, DEOS_NODE_MAIN_STM32, &frame.id);
+    
+    frame.dlc = can_bytes_to_dlc(4);
+    frame.data[DEOS_VERSION_OFFSET] = 0x10; /* v1.0 */
+    frame.data[DEOS_LENGTH_OFFSET] = 0;
+    
+    deos_message_t rx_msg = {0};
+    int ret = deos_decode_frame(&frame, &rx_msg);
+    zassert_equal(ret, -EPROTONOSUPPORT, "Expected -EPROTONOSUPPORT for v1.0 frame");
+    
+    /* Test valid version */
+    frame.data[DEOS_VERSION_OFFSET] = DEOS_PROTOCOL_VERSION; /* v1.1 */
+    ret = deos_decode_frame(&frame, &rx_msg);
+    zassert_equal(ret, 0, "Valid version should decode");
 }

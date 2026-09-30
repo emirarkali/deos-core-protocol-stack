@@ -50,7 +50,7 @@ int deos_send_from_node(
         memcpy(msg.payload, payload, payload_len);
     }
 
-    struct can_frame frame;
+    struct can_frame frame = {0};
     int ret = deos_encode_frame(&msg, &frame);
     if (ret != 0) {
         LOG_ERR("Failed to encode frame: %d", ret);
