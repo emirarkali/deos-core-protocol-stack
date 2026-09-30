@@ -1,6 +1,6 @@
 #include <zephyr/ztest.h>
 #include <deos/deos.h>
-#include "../../lib/deos_core/src/deos_internal.h"
+#include "../../../lib/deos_core/src/deos_internal.h"
 
 ZTEST_SUITE(deos_protocol, NULL, NULL, NULL, NULL, NULL);
 
