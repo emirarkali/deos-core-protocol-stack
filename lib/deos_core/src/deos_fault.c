@@ -26,7 +26,7 @@ static struct deos_fault_transfer transfer_ctx;
 
 static void send_fault_response(const deos_fault_record_t *record, deos_node_id_t destination)
 {
-    uint8_t payload[13] = {0}; // 10 byte semantic data, but can be up to max payload
+    uint8_t payload[10] = {0}; // 10 byte semantic data
 
     deos_put_u16_le(&payload[0], record->fault_id);
     payload[2] = record->severity;
@@ -171,9 +171,10 @@ int deos_fault_set_inactive(uint16_t fault_id)
 
     for (int i = 0; i < DEOS_MAX_FAULT_RECORDS; i++) {
         if (fault_table[i].fault_id == fault_id) {
-            /* Only set INACTIVE if not already INACTIVE or LATCHED, 
-               but wait, instruction says "state = INACTIVE yapsın" */
-            fault_table[i].state = DEOS_FAULT_STATE_INACTIVE;
+            /* Only set INACTIVE if not LATCHED */
+            if (fault_table[i].state != DEOS_FAULT_STATE_LATCHED) {
+                fault_table[i].state = DEOS_FAULT_STATE_INACTIVE;
+            }
             ret = 0;
             break;
         }
