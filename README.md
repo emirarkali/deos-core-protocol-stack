@@ -12,10 +12,11 @@ Traction, Steering, Brake gibi fiziksel kontrol düğümleri (node'lar), doğrud
 
 - **Tamamen CAN-FD Tabanlı:** 64 byte'a kadar payload ve yüksek hız. (Classic CAN desteği veya fallback mekanizması yoktur, donanım desteklemiyorsa `ENOTSUP` döner).
 - **Sıfır Dinamik Bellek (Zero-Allocation):** `malloc` veya `free` kullanılmaz. Tamamen RAM dostu, statik ve deterministik bellek yönetimi (MISRA C / safety-critical yaklaşımlarına uygun).
-- **Gelişmiş Fault Management:** Sistemdeki hataların tespiti, saklanması (latching), temizlenmesi ve diagnostik akışlar (`GET_FAULTS`, `CLEAR_FAULTS`) tamamen Core tarafından yönetilir.
-- **Donanımsal RX Filtreleme (Hardware RX Filters):** Yalnızca hedeflenen mesajların (Local & Broadcast) MCU'yu uyandırmasını sağlayan donanım destekli CAN filtreleri (Router node'lar için promiscuous mod desteği).
-- **Otonom PING/PONG:** Ağdaki canlılığı kontrol etmek için uygulamanın (application) haberi olmadan arka planda otomatik PONG yanıtı üretir.
-- **Ayrıştırılmış Mimari:** Application katmanı (iş mantığı) ile Core katmanı (haberleşme, serialization, fault handling) birbirinden kesin çizgilerle ayrılmıştır.
+- **Hosted Local Nodes (Çoklu Düğüm Desteği):** Aynı fiziksel donanım (MCU) ve CAN arayüzü üzerinde, birbirinden tamamen izole (bağımsız sequence counter, handler ve fault tabloları) birden çok mantıksal (logical) DEOS Node barındırma yeteneği.
+- **Node-Specific Fault Management:** Sistemdeki hataların tespiti, saklanması (latching), temizlenmesi ve diagnostik akışlar (`GET_FAULTS`, `CLEAR_FAULTS`) her bir mantıksal düğüm (local node) için tamamen izole ve otonom olarak yönetilir.
+- **Donanımsal RX Filtreleme (Hardware RX Filters):** Yalnızca kayıtlı (registered) node'lara ve Broadcast'e gelen mesajların MCU'yu uyandırmasını sağlayan donanım destekli dinamik CAN filtreleri.
+- **Otonom PING/PONG:** Ağdaki canlılığı kontrol etmek için uygulamanın (application) haberi olmadan arka planda (doğru source ID'ler kurgulanarak) otomatik PONG yanıtı üretir.
+- **Ayrıştırılmış Mimari:** Application katmanı (iş mantığı) ile Core katmanı (haberleşme, serialization, fault handling) birbirinden kesin çizgilerle ayrılmıştır. Core hiçbir BMS-specific logic içermez.
 
 ## 🏗 Mimari Felsefe (Separation of Concerns)
 
@@ -47,7 +48,8 @@ void main(void) {
     struct deos_config config = {
         .node_id = DEOS_NODE_STEERING,
         .can_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_canbus)),
-        .router_enabled = false
+        .router_enabled = false,
+        .hosted_nodes_enabled = true /* Birden çok node barındırma aktif */
     };
 
     /* 2. Sistemi ilklendir */
@@ -56,8 +58,12 @@ void main(void) {
         return;
     }
 
-    /* 3. Gelen komutlar için Handler kayıt et (Application katmanına bağla) */
-    deos_register_handler(
+    /* 3. (İsteğe Bağlı) Ek bir Local Node kayıt et (Örn: Brake) */
+    deos_register_local_node(DEOS_NODE_BRAKE);
+
+    /* 4. Gelen komutlar için Handler kayıt et (Application katmanına bağla) */
+    deos_register_handler_for_node(
+        DEOS_NODE_STEERING, /* Hangi node için? */
         DEOS_CLASS_COMMAND, 
         DEOS_SERVICE_STEERING,
         DEOS_CMD_STEERING_SET_TARGET_ANGLE,
@@ -65,13 +71,14 @@ void main(void) {
         NULL
     );
 
-    /* 4. Arka plan TX/RX thread'lerini başlat */
+    /* 5. Arka plan TX/RX thread'lerini başlat */
     deos_start();
 
-    /* 5. Dışarıya mesaj gönder (Source ID otomatik olarak korunur) */
+    /* 6. Dışarıya mesaj gönder (Bağımsız sequence counter ile Source ID otomatik olarak korunur) */
     uint16_t current_angle = 450; 
-    deos_send(
-        DEOS_NODE_MAIN_STM32, 
+    deos_send_from_node(
+        DEOS_NODE_STEERING, /* Source Node */
+        DEOS_NODE_MAIN_STM32, /* Target Node */ 
         DEOS_PRIO_STATUS,
         DEOS_CLASS_STATUS, 
         DEOS_SERVICE_STEERING,
@@ -83,10 +90,12 @@ void main(void) {
 ```
 
 ## 🛡 Fault Management (Hata Yönetimi)
-Fault Management modülü, node'larda gerçekleşen hataların tek bir elden yönetilmesini sağlar.
-- **Raising:** `deos_fault_raise(DEOS_FAULT_RX_QUEUE_OVERFLOW, DEOS_FAULT_SEVERITY_ERROR)`
-- **Latching:** `deos_fault_latch()` ile sabitlenen hatalar sadece `CLEAR_FAULTS` komutu ile temizlenebilir.
-- **Diagnostik Streaming:** Diğer bir node'dan (Örn: Main MCU) `GET_FAULTS` komutu geldiğinde, DEOS Core bloklanmayan (non-blocking) `k_work_delayable` altyapısı ile mevcut hataları aralarında nominal 100 ms boşluk bırakarak karşıya aktarır. Tamamen otonom çalışır.
+Fault Management modülü, "Hosted Local Nodes" yeteneği ile tam entegre çalışır. Her bir fiziksel veya barındırılan (hosted) düğüm (node) kendi **bağımsız hata tablosuna (fault context)** sahiptir.
+
+- **Raising:** `deos_fault_raise_for_node(DEOS_NODE_STEERING, DEOS_FAULT_RX_QUEUE_OVERFLOW, DEOS_FAULT_SEVERITY_ERROR)`
+- **Latching:** `deos_fault_latch_for_node()` ile sabitlenen hatalar sadece `CLEAR_FAULTS` komutu ile temizlenebilir.
+- **Diagnostik Streaming:** Diğer bir node'dan (Örn: Main MCU) `GET_FAULTS` komutu geldiğinde, DEOS Core mesajı hedeflenen Local Node'a yönlendirir ve o node'a ait hata tablosunu (hedef Node'un Source kimliği ile) bloklanmayan (non-blocking) `k_work_delayable` altyapısı ile karşıya aktarır. Bir node stream yaparken diğeri de eşzamanlı olarak stream yapabilir.
+- **Legacy Desteği:** `deos_fault_raise(...)` gibi eski API'ler, doğrudan donanımsal primary node'a (`config.node_id`) yazmak üzere "wrapper" olarak yerinde bırakılmıştır.
 
 ## 🎛 Donanımsal RX Filtreleme (Hardware RX Filter)
 Sistem iki farklı rolü destekler:
@@ -131,9 +140,10 @@ west build -b nucleo_f439zi tests/protocol/ -p always
 
 ## 🚧 Mevcut Durum (Development Status)
 - ✅ **Codec & Validation:** Tamamlandı.
-- ✅ **Handler Registration & Dispatching:** Tamamlandı.
-- ✅ **HW Filters & RX/TX Static Threads:** Tamamlandı.
-- ✅ **Auto PING/PONG & Networking:** Tamamlandı.
-- ✅ **Fault Management & Diagnostic Streaming:** Tamamlandı.
+- ✅ **Hosted Local Nodes Registry & Multi-Node Sequence/Dispatch:** Tamamlandı.
+- ✅ **Handler Registration & Node-Aware Dispatching:** Tamamlandı.
+- ✅ **Dynamic HW Filters & RX/TX Static Threads:** Tamamlandı.
+- ✅ **Auto PING/PONG & Node-Aware Networking:** Tamamlandı.
+- ✅ **Per-Node Fault Management & Diagnostic Streaming:** Tamamlandı.
 - ⚠️ Geliştirme kartı `nucleo_f439zi` donanımsal olarak CAN-FD desteklememektedir, API CAN-FD kısıtlamasını denetlediği için test/uyarlama senaryolarında donanım kısıtlamalarına dikkat edilmelidir.
 - 🚧 (PROVISIONAL) Yönlendirme (Routing) mantığının farklı fiziksel ağlara (Ethernet vs.) aktarılmasına dair paket yapısı (framing) ICD üzerinde henüz son halini ("frozen") almadığından stub olarak bırakılmıştır.

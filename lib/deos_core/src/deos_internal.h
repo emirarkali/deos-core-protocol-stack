@@ -25,6 +25,7 @@ uint32_t deos_get_u32_le(const uint8_t *src);
  */
 uint8_t deos_next_sequence_for_node(deos_node_id_t node_id);
 bool deos_is_local_node(deos_node_id_t node_id);
+int deos_get_local_node_index(deos_node_id_t node_id);
 int deos_get_local_nodes(deos_node_id_t *nodes, int max_nodes);
 
 /*

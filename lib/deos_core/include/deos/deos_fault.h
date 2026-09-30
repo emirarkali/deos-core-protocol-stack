@@ -59,52 +59,21 @@ typedef struct
     uint32_t last_occurrence_ms;
 } deos_fault_record_t;
 
+int deos_fault_raise_for_node(deos_node_id_t local_node, uint16_t fault_id, deos_fault_severity_t severity);
+int deos_fault_set_inactive_for_node(deos_node_id_t local_node, uint16_t fault_id);
+int deos_fault_latch_for_node(deos_node_id_t local_node, uint16_t fault_id);
+int deos_fault_clear_for_node(deos_node_id_t local_node, uint16_t fault_id);
+int deos_fault_clear_all_for_node(deos_node_id_t local_node);
+bool deos_fault_is_active_for_node(deos_node_id_t local_node, uint16_t fault_id);
+
 /**
- * @brief Raise or update a fault condition.
- *
- * @param fault_id Unique identifier for the fault.
- * @param severity Severity of the fault.
- * @return 0 on success, negative error code on failure (e.g. -ENOSPC).
+ * @brief Primary node wrappers for backward compatibility
  */
 int deos_fault_raise(uint16_t fault_id, deos_fault_severity_t severity);
-
-/**
- * @brief Mark an active fault as inactive.
- *
- * @param fault_id Unique identifier for the fault.
- * @return 0 on success, -ENOENT if fault not found.
- */
 int deos_fault_set_inactive(uint16_t fault_id);
-
-/**
- * @brief Mark a fault as latched (must be explicitly cleared).
- *
- * @param fault_id Unique identifier for the fault.
- * @return 0 on success, -ENOENT if fault not found.
- */
 int deos_fault_latch(uint16_t fault_id);
-
-/**
- * @brief Clear a specific fault from local storage.
- *
- * @param fault_id Unique identifier for the fault.
- * @return 0 on success, -ENOENT if fault not found.
- */
 int deos_fault_clear(uint16_t fault_id);
-
-/**
- * @brief Clear all stored faults.
- *
- * @return 0 on success.
- */
 int deos_fault_clear_all(void);
-
-/**
- * @brief Check if a fault is currently active or latched.
- *
- * @param fault_id Unique identifier for the fault.
- * @return true if ACTIVE or LATCHED, false otherwise.
- */
 bool deos_fault_is_active(uint16_t fault_id);
 
 #ifdef __cplusplus

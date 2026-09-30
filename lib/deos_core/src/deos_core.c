@@ -134,15 +134,20 @@ int deos_register_local_node(deos_node_id_t node_id)
 
 bool deos_is_local_node(deos_node_id_t node_id)
 {
+    return deos_get_local_node_index(node_id) >= 0;
+}
+
+int deos_get_local_node_index(deos_node_id_t node_id)
+{
     if (node_id == DEOS_NODE_INVALID || node_id == DEOS_NODE_BROADCAST) {
-        return false;
+        return -1;
     }
     for (int i = 0; i < DEOS_MAX_LOCAL_NODES; i++) {
         if (local_nodes[i].in_use && local_nodes[i].node_id == node_id) {
-            return true;
+            return i;
         }
     }
-    return false;
+    return -1;
 }
 
 int deos_get_local_nodes(deos_node_id_t *nodes, int max_nodes)
