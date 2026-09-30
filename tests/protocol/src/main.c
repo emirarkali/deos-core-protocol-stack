@@ -1,5 +1,6 @@
 #include <zephyr/ztest.h>
 #include <deos/deos.h>
+#include <deos/deos_fault.h>
 #include "../../../lib/deos_core/src/deos_internal.h"
 
 ZTEST_SUITE(deos_protocol, NULL, NULL, NULL, NULL, NULL);
@@ -100,14 +101,16 @@ ZTEST_SUITE(deos_fault_test, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(deos_fault_test, test_fault_01_reject_zero_id)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     int ret = deos_fault_raise(0, DEOS_FAULT_SEVERITY_ERROR);
     zassert_equal(ret, -EINVAL, "Fault ID 0 should be rejected");
 }
 
 ZTEST(deos_fault_test, test_fault_02_new_fault_raise)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     int ret = deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     zassert_equal(ret, 0, "Raise failed");
     zassert_true(deos_fault_is_active(0x0100), "Fault should be active");
@@ -115,7 +118,8 @@ ZTEST(deos_fault_test, test_fault_02_new_fault_raise)
 
 ZTEST(deos_fault_test, test_fault_03_same_fault_repeated)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     
@@ -126,7 +130,8 @@ ZTEST(deos_fault_test, test_fault_03_same_fault_repeated)
 
 ZTEST(deos_fault_test, test_fault_04_set_inactive)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     deos_fault_set_inactive(0x0100);
     zassert_false(deos_fault_is_active(0x0100), "Fault should be inactive");
@@ -134,7 +139,8 @@ ZTEST(deos_fault_test, test_fault_04_set_inactive)
 
 ZTEST(deos_fault_test, test_fault_05_latch)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     deos_fault_latch(0x0100);
     zassert_true(deos_fault_is_active(0x0100), "Latched fault should be active");
@@ -142,7 +148,8 @@ ZTEST(deos_fault_test, test_fault_05_latch)
 
 ZTEST(deos_fault_test, test_fault_06_clear_single)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     deos_fault_clear(0x0100);
     zassert_false(deos_fault_is_active(0x0100), "Fault should be cleared");
@@ -150,7 +157,8 @@ ZTEST(deos_fault_test, test_fault_06_clear_single)
 
 ZTEST(deos_fault_test, test_fault_07_clear_all)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     deos_fault_raise(0x0100, DEOS_FAULT_SEVERITY_WARNING);
     deos_fault_raise(0x0101, DEOS_FAULT_SEVERITY_ERROR);
     deos_fault_clear_all();
@@ -160,7 +168,8 @@ ZTEST(deos_fault_test, test_fault_07_clear_all)
 
 ZTEST(deos_fault_test, test_fault_08_max_table_full)
 {
-    deos_fault_init();
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     for (int i = 1; i <= 32; i++) {
         deos_fault_raise(i, DEOS_FAULT_SEVERITY_INFO);
     }
@@ -172,7 +181,8 @@ ZTEST_SUITE(deos_local_node_test, NULL, NULL, NULL, NULL, NULL);
 
 ZTEST(deos_local_node_test, test_local_node_01_primary_node_is_local)
 {
-    /* Assuming node is initialized to DEOS_NODE_STEERING */
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
     zassert_true(deos_is_local_node(DEOS_NODE_STEERING), "Primary node should be local");
 }
 
@@ -218,8 +228,11 @@ ZTEST(deos_node_fault_test, test_01_multi_node_fault_isolation)
 
 ZTEST(deos_node_fault_test, test_02_legacy_wrappers)
 {
-    /* If we used legacy wrappers, they would target the primary node */
-    /* We expect -ENODEV here because config is not fully valid without deos_init */
+    struct deos_config config = { .node_id = DEOS_NODE_STEERING };
+    deos_init(&config);
+    
     int ret = deos_fault_raise(0x1234, DEOS_FAULT_SEVERITY_WARNING);
-    zassert_equal(ret, -ENODEV, "Wrapper should fail if system not initialized");
+    zassert_equal(ret, 0, "Legacy wrapper should succeed on primary node");
+    
+    zassert_true(deos_fault_is_active_for_node(DEOS_NODE_STEERING, 0x1234), "Fault should be active on primary node");
 }
