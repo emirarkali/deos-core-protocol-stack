@@ -161,7 +161,50 @@ Eğer hatanın kritik olduğunu ve kesinlikle Main MCU tarafından "Clear" gönd
 
 ---
 
-## 7. Otonom Özellikler (Sizin Kod Yazmanıza Gerek Olmayan Kısımlar)
+## 7. Heartbeat Yönetimi (Application Level Scheduling)
+
+DEOS Core içerisinde bir **HEARTBEAT** mesajlaşma desteği bulunur (`deos_send_heartbeat`). Ancak DEOS Core **otomatik bir arka plan timer'ı (periyodik gönderim) çalıştırmaz**. Heartbeat gönderim periyodu, "timeout" kararları, "node alive" gibi mantıksal denetimler ve hata fırlatma politikaları tamamen uygulamanın (Application) sorumluluğundadır.
+
+### Heartbeat Gönderme (Örnek Periyodik Timer)
+Zephyr `k_work` kullanarak kendi uygulamanızda şu şekilde heartbeat gönderimini yönetebilirsiniz (Önerilen periyot: 1 saniye):
+
+```c
+static struct k_work_delayable heartbeat_work;
+
+static void heartbeat_work_fn(struct k_work *work)
+{
+    /* Primary node kimliğiyle broadcast gönderir */
+    deos_send_heartbeat();
+
+    /* Hosted bir node adına göndermek isterseniz:
+       deos_send_heartbeat_from_node(DEOS_NODE_BMS_MAIN);
+       deos_send_heartbeat_from_node(DEOS_NODE_BMS_AUX); */
+
+    k_work_reschedule(&heartbeat_work, K_SECONDS(1));
+}
+
+void app_start(void)
+{
+    k_work_init_delayable(&heartbeat_work, heartbeat_work_fn);
+    k_work_schedule(&heartbeat_work, K_SECONDS(1));
+}
+```
+
+### Heartbeat Mesajlarını Yakalama (Receive)
+PING/PONG döngüsünün aksine, gelen HEARTBEAT mesajları Core tarafından otomatik (sessiz) tüketilmez ve PONG üretmez. Diğer node'lardan gelen heartbeat'leri dinlemek için normal handler kaydınızı yapmalısınız:
+
+```c
+deos_register_handler(
+    DEOS_CLASS_NETWORK,
+    DEOS_SERVICE_SYSTEM,
+    DEOS_CMD_SYSTEM_HEARTBEAT,
+    my_heartbeat_handler, /* Uygulamanız timeout / alive logic'ini burada çalıştırır */
+    NULL);
+```
+
+---
+
+## 8. Otonom Özellikler (Sizin Kod Yazmanıza Gerek Olmayan Kısımlar)
 
 Siz sistemi `deos_start()` ile başlattıktan sonra DEOS Core aşağıdaki işlemleri **arka planda kendi kendine** yapar:
 
@@ -171,7 +214,7 @@ Siz sistemi `deos_start()` ile başlattıktan sonra DEOS Core aşağıdaki işle
 
 ---
 
-## 8. Sık Karşılaşılan Hata Kodları
+## 9. Sık Karşılaşılan Hata Kodları
 
 - `-ENOTSUP`: Çalıştığınız mikrodenetleyicinin CAN cihazı CAN-FD modunu desteklemiyor demektir. Devicetree veya Kconfig ayarlarınızı kontrol edin.
 - `-EPERM`: `deos_send_from_node` kullanırken kendi üzerinizde barındırmadığınız (Kayıtsız) bir Source ID kullanarak başkasının kimliğine (spoofing) bürünmeye çalıştınız.

@@ -355,3 +355,61 @@ ZTEST(deos_codec_test, test_codec_04_version_validation) {
     ret = deos_decode_frame(&frame, &rx_msg);
     zassert_equal(ret, 0, "Valid version should decode");
 }
+
+ZTEST_SUITE(deos_heartbeat_test, NULL, NULL, NULL, NULL, NULL);
+
+static bool heartbeat_handler_called = false;
+static int test_heartbeat_handler(const deos_message_t *msg, void *user_data)
+{
+    heartbeat_handler_called = true;
+    return 0;
+}
+
+ZTEST(deos_heartbeat_test, test_01_heartbeat_receive_routes_to_app)
+{
+    TC_PRINT("Test: Ensure incoming heartbeat passes to application handler and doesn't auto-consume\n");
+    struct deos_config config = { .node_id = DEOS_NODE_MAIN_STM32 };
+    deos_init(&config);
+
+    deos_register_handler(
+        DEOS_CLASS_NETWORK,
+        DEOS_SERVICE_SYSTEM,
+        DEOS_CMD_SYSTEM_HEARTBEAT,
+        test_heartbeat_handler,
+        NULL);
+
+    deos_message_t msg = {0};
+    msg.destination = DEOS_NODE_BROADCAST;
+    msg.source = 0x20;
+    msg.message_class = DEOS_CLASS_NETWORK;
+    msg.service = DEOS_SERVICE_SYSTEM;
+    msg.command = DEOS_CMD_SYSTEM_HEARTBEAT;
+    msg.payload_len = 0;
+    
+    heartbeat_handler_called = false;
+    deos_dispatch(&msg);
+    zassert_true(heartbeat_handler_called, "Heartbeat handler should be called");
+}
+
+ZTEST(deos_heartbeat_test, test_02_heartbeat_send_unregistered_node)
+{
+    TC_PRINT("Test: Ensure heartbeat from unregistered node is rejected\n");
+    struct deos_config config = { .node_id = DEOS_NODE_MAIN_STM32 };
+    deos_init(&config);
+
+    int ret = deos_send_heartbeat_from_node(0x99); /* Unregistered */
+    zassert_equal(ret, -EPERM, "Should reject unregistered source node");
+}
+
+ZTEST(deos_heartbeat_test, test_03_heartbeat_send_fields)
+{
+    TC_PRINT("Test: Ensure heartbeat API uses correct arguments (indirectly by ensuring it succeeds on valid node)\n");
+    struct deos_config config = { .node_id = DEOS_NODE_MAIN_STM32 };
+    deos_init(&config);
+    
+    /* In a full mock we could intercept the frame, but we at least ensure it passes validation */
+    int ret = deos_send_heartbeat();
+    /* Note: without can_start(), deos_send might return -ENETDOWN depending on zephyr state, 
+       but if loopback is ready it returns 0. As long as it doesn't return -EINVAL we are good. */
+    zassert_not_equal(ret, -EINVAL, "deos_send_heartbeat should build valid fields");
+}

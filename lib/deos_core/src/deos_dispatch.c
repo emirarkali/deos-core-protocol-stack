@@ -116,8 +116,8 @@ void deos_dispatch(const deos_message_t *msg)
                 deos_handle_pong(msg);
                 return;
             case DEOS_CMD_SYSTEM_HEARTBEAT:
-                /* Provisional heartbeat handler */
-                return;
+                /* Do not auto-consume heartbeat, let application handle it */
+                break;
             default:
                 break; /* Allow app to handle other system network cmds */
         }

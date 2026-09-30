@@ -27,6 +27,32 @@ int deos_send_ping(
         sizeof(payload));
 }
 
+int deos_send_heartbeat_from_node(deos_node_id_t source_node)
+{
+    if (!deos_is_local_node(source_node)) {
+        LOG_ERR("Cannot send heartbeat from unregistered node 0x%02X", source_node);
+        return -EPERM;
+    }
+
+    return deos_send_from_node(
+        source_node,
+        DEOS_NODE_BROADCAST,
+        DEOS_PRIO_NETWORK,
+        DEOS_CLASS_NETWORK,
+        DEOS_SERVICE_SYSTEM,
+        DEOS_CMD_SYSTEM_HEARTBEAT,
+        NULL,
+        0);
+}
+
+int deos_send_heartbeat(void)
+{
+    const struct deos_config *config = deos_get_config();
+    if (!config) return -ENODEV;
+
+    return deos_send_heartbeat_from_node(config->node_id);
+}
+
 void deos_handle_ping(const deos_message_t *msg)
 {
     if (msg->destination == DEOS_NODE_BROADCAST) {

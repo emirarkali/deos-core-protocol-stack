@@ -102,6 +102,21 @@ int deos_send_from_node(
     const void *payload,
     size_t payload_len);
 
+/**
+ * @brief Send a HEARTBEAT message.
+ *
+ * @return 0 on success, negative error code on failure.
+ */
+int deos_send_heartbeat(void);
+
+/**
+ * @brief Send a HEARTBEAT message from a specific local node.
+ *
+ * @param source_node The local node ID sending the heartbeat.
+ * @return 0 on success, negative error code on failure.
+ */
+int deos_send_heartbeat_from_node(deos_node_id_t source_node);
+
 #ifdef __cplusplus
 }
 #endif
