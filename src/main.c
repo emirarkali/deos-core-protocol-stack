@@ -7,19 +7,15 @@
 
 LOG_MODULE_REGISTER(deos_app);
 
-/* Example application handler for Steering */
-static int steering_target_handler(
+/* Example generic application handler */
+static int generic_command_handler(
     const deos_message_t *message,
     void *user_data)
 {
-    if (message->payload_len != 2) {
-        return -EMSGSIZE;
-    }
+    LOG_INF("Received generic command from 0x%02X, payload length: %d", 
+            message->source, message->payload_len);
 
-    /* byteorder header included at the top */
-    int16_t raw = (int16_t)sys_get_le16(message->payload);
-
-    LOG_INF("Steering target raw = %d", raw);
+    /* Parse payload using sys_get_le16 etc. if needed */
 
     return 0;
 }
@@ -40,7 +36,8 @@ int main(void)
     }
 
     struct deos_config config = {
-        .node_id = DEOS_NODE_STEERING,
+        /* Define the primary physical node identity of this MCU */
+        .node_id = DEOS_NODE_MAIN_STM32,
         .can_dev = can_dev,
         .router_enabled = false
     };
@@ -59,11 +56,12 @@ int main(void)
         }
     }
 
+    /* Example of registering an application handler */
     deos_register_handler(
         DEOS_CLASS_COMMAND,
-        DEOS_SERVICE_STEERING,
-        DEOS_CMD_STEERING_SET_TARGET_ANGLE,
-        steering_target_handler,
+        DEOS_SERVICE_SYSTEM,
+        0x01, /* Example Command ID */
+        generic_command_handler,
         NULL);
 
     ret = deos_start();
@@ -76,7 +74,7 @@ int main(void)
 
 #if DEOS_SAMPLE_PING_ENABLED
     /* Compile-time closed ping test as requested */
-    deos_send_ping(DEOS_NODE_MAIN_STM32, 0x12345678);
+    /* deos_send_ping(DEOS_NODE_BMS_MAIN, 0x12345678); */
 #endif
 
     while (1) {
