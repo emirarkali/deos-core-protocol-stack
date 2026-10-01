@@ -6,7 +6,7 @@
 
 LOG_MODULE_REGISTER(deos_dispatch, LOG_LEVEL_INF);
 
-#define DEOS_MAX_HANDLERS 32
+
 
 struct deos_handler_entry {
     bool in_use;

@@ -15,15 +15,14 @@ static atomic_t rx_overflow_flag = ATOMIC_INIT(0);
 /*
  * Static RX Queue
  */
-#define DEOS_RX_QUEUE_SIZE 16
+
 
 K_MSGQ_DEFINE(rx_msgq, sizeof(struct can_frame), DEOS_RX_QUEUE_SIZE, 4);
 
 /*
  * RX Worker Thread
  */
-#define DEOS_RX_THREAD_STACK_SIZE 1024
-#define DEOS_RX_THREAD_PRIORITY   5
+
 
 static struct k_thread rx_thread_data;
 static K_KERNEL_STACK_DEFINE(rx_thread_stack, DEOS_RX_THREAD_STACK_SIZE);
